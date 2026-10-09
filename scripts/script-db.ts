@@ -12,6 +12,7 @@ export async function openScriptDb(): Promise<Queryable & { close: () => Promise
       close: () => sql.end(),
     };
   }
+  if (process.env.VERCEL) throw new Error("DATABASE_URL is not set for this Vercel environment");
   console.log("DATABASE_URL not set — using the local PGlite database in .data/pglite (stop `npm run dev` first).");
   const { PGlite } = await import("@electric-sql/pglite");
   const { pg_trgm } = await import("@electric-sql/pglite/contrib/pg_trgm");

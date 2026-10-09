@@ -1,0 +1,19 @@
+name: Bug
+description: Something isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: device
+    attributes:
+      label: Device / browser
+      placeholder: e.g. iPhone 15, installed app

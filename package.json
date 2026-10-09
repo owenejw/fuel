@@ -13,7 +13,9 @@
     "seed:afcd": "tsx scripts/import-afcd.ts",
     "icons": "node scripts/make-icons.mjs",
     "test:db": "vitest run tests/db",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate:deploy": "tsx scripts/migrate.ts --deploy",
+    "setup": "npm install && npm run seed:afcd"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

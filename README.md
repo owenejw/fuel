@@ -4,7 +4,7 @@ Fuel is a mobile-first PWA for logging food, kilojoules, macros and micronutrien
 
 There is **no sign-in**. Each device picks a profile once ("Who's this?"), and a long-lived cookie remembers it. Anyone can switch profile from Settings. Data isn't private between household members. An optional household passcode can keep strangers who find the URL out.
 
-**Stack:** Next.js 16 (App Router, server actions) · TypeScript · Tailwind v4 · Postgres (Supabase in production, embedded PGlite locally) · Recharts · `@zxing/browser` · Claude API · Vercel.
+**Stack:** Next.js 16 (App Router, server actions) · TypeScript · Tailwind v4 · Postgres (Neon in production, embedded PGlite locally) · Recharts · `@zxing/browser` · Claude API · Vercel.
 
 ## Features
 
@@ -22,39 +22,54 @@ Unknown nutrients are stored as absent, shown as **"no data"**, and never counte
 
 ---
 
-## Run it locally (no setup)
+## Working on it
+
+Jez, Levi and Owen all contribute through pull requests. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup and the workflow. In short:
 
 ```bash
-npm install
-npm run seed:afcd     # downloads FSANZ AFCD Release 3 into the local database (~1,600 foods)
-npm run dev           # http://localhost:3000
+npm run setup     # install + load the AFCD food database into a local database
+npm run dev       # http://localhost:3000
 ```
 
-With no `DATABASE_URL`, the app uses an embedded Postgres (PGlite) stored in `.data/pglite`. Migrations run automatically. Stop `npm run dev` before running scripts that write to the local database (`seed:afcd`, `db:migrate`), because PGlite allows one process at a time.
+With no `DATABASE_URL`, the app uses an embedded Postgres (PGlite) stored in `.data/pglite`, and migrations run automatically. Stop `npm run dev` before running scripts that write to it (`seed:afcd`, `db:migrate`), because PGlite allows one process at a time.
 
-Copy `.env.example` to `.env.local` to turn on optional features:
+### Environment variables
+
+Locally, these go in `.env.local`, copied from `.env.example`. In production they go in Vercel → Project → Settings → Environment Variables.
 
 | Variable | Needed for |
 | --- | --- |
-| `DATABASE_URL` | Production. Use the Supabase **transaction pooler** connection string (port 6543). |
-| `APP_PASSCODE` | Optional household passcode, asked once per device. |
+| `DATABASE_URL` | Production and previews. Set automatically by the Neon integration. |
+| `APP_PASSCODE` | Optional household passcode, asked once per device. **Recommended in production.** |
+| `ALLOW_PREVIEW_MIGRATIONS` | Set to `1` for Preview only, once previews get their own Neon branch. |
 | `USDA_API_KEY` | USDA fallback search. Free key: <https://fdc.nal.usda.gov/api-key-signup> |
 | `OFF_USER_AGENT` | Open Food Facts asks for an identifying User-Agent, e.g. `Fuel/0.1 (you@example.com)`. |
 | `ANTHROPIC_API_KEY` | AI features (server-side only). |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Push reminders. Generate keys with `npx web-push generate-vapid-keys`. |
 | `CRON_SECRET` | Protects `/api/cron/reminders`. |
-| `APP_TIMEZONE` | Defaults to `Australia/Sydney`. Used for calendar events and reminders. |
+| `APP_TIMEZONE` | Defaults to `Australia/Sydney`. |
 
-## Database (Supabase)
+## Hosting and deploys (all free)
 
-1. Create a Supabase project, ideally in the Sydney region.
-2. Copy **Project Settings → Database → Connection string → Transaction pooler** into `DATABASE_URL`.
-3. Run `npm run db:migrate` to apply [`supabase/migrations/`](supabase/migrations). This also seeds the Jez, Levi and Owen profiles.
-4. Run `npm run seed:afcd` to import AFCD into `reference_foods`. You can also pass a local `.xlsx` path or `--dry-run`.
+| Piece | Service | Notes |
+| --- | --- | --- |
+| Code, reviews, CI | GitHub (public repo) | `main` is protected. Each PR needs passing CI and one approval. |
+| App | Vercel Hobby | Every PR gets a preview URL; merging to `main` deploys production. |
+| Database | Neon free Postgres (via the Vercel Marketplace) | 0.5 GB. Sleeps when idle and wakes in about a second. Preview deployments can get their own database branch. |
 
-**Access model.** The browser never talks to the database. Pages call Next.js server actions, which read the device's `fuel_profile` cookie and query Postgres directly as the database owner. Every table has RLS enabled with no policies, and the migration revokes all privileges from Supabase's `anon` and `authenticated` roles. That means the public Supabase REST API and anon key can't read or write anything. Supabase Auth isn't used.
+On every Vercel build, `vercel.json` runs `npm run db:migrate:deploy` before `next build`:
+- **Production** builds apply any new migration to the production database.
+- **Preview** builds skip migrations unless `ALLOW_PREVIEW_MIGRATIONS=1` is set for the Preview environment. Only set it once previews use their own Neon branch, or a pull request could change the live database.
 
-**Sharing.** Custom foods and recipes are shared by the whole household; they record who created them. Logs, weights, workouts, goals, water, saved meals, grocery lists and push subscriptions belong to one profile. Deleting a profile removes those rows, and shared foods stay.
+After the first production deploy, load the food database once:
+
+```bash
+DATABASE_URL="<Neon production connection string>" npm run seed:afcd
+```
+
+**Access model.** The browser never talks to the database. Pages call Next.js server actions, which read the device's `fuel_profile` cookie and query Postgres directly. Every table also has RLS enabled with no policies, and privileges are revoked from Supabase's `anon` and `authenticated` roles where those exist. That keeps the schema locked down if it's ever hosted on Supabase.
+
+**Sharing.** Custom foods and recipes are shared by the household; they record who created them. Logs, weights, workouts, goals, water, saved meals, grocery lists and push subscriptions belong to one profile. Deleting a profile removes those rows, and shared foods stay.
 
 ## Food data
 
@@ -77,13 +92,6 @@ The AFCD import reads the **All solids & liquids per 100 g** sheet of the Releas
 ## Reminders (web push)
 
 On iPhone, add Fuel to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so either use Vercel Pro (`crons` in `vercel.ts`) or a free external scheduler such as cron-job.org or a GitHub Actions schedule.
-
-## Deploy to Vercel
-
-1. Push to GitHub and import the repo in Vercel; the framework preset is Next.js.
-2. Add `DATABASE_URL`, plus whichever optional variables you want, to Production and Preview.
-3. Run `npm run db:migrate` and `npm run seed:afcd` once against that `DATABASE_URL` from your machine.
-4. Open the site on each phone, pick a profile, and use Share → **Add to Home Screen**.
 
 ## Tests
 
