@@ -15,6 +15,7 @@ import {
   deleteSavedMeal,
   fetchCustomFoods,
   fetchFood,
+  fetchRecipes,
   fetchSavedMeals,
   lookupBarcode,
   savedMealToEntries,
@@ -25,15 +26,15 @@ import { friendlyDate, isValidDate, today } from "@/lib/dates";
 import { SOURCE_LABELS } from "@/lib/foods/shared";
 import type { FrequentFood } from "@/lib/frequent";
 import { useFrequentFoods } from "@/lib/hooks";
-import { sumNutrients } from "@/lib/nutrients";
+import { scaleNutrients, sumNutrients } from "@/lib/nutrients";
 import { defaultSlot } from "@/lib/slots";
-import { MEAL_SLOTS, SLOT_LABELS, type Food, type MealSlot, type SavedMeal } from "@/lib/types";
+import { MEAL_SLOTS, SLOT_LABELS, type Food, type MealSlot, type Recipe, type SavedMeal } from "@/lib/types";
 
-type Tab = "frequent" | "mine" | "meals";
+type Tab = "frequent" | "mine" | "recipes" | "meals";
 
 function frequentToFood(f: FrequentFood): Food {
   return {
-    kind: f.kind === "custom" ? "custom" : "reference",
+    kind: f.kind === "custom" ? "custom" : f.kind === "recipe" ? "recipe" : "reference",
     id: f.food_id ?? "",
     source: "history",
     name: f.name,
@@ -49,7 +50,7 @@ export function LogView() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
-  const { unit } = useApp();
+  const { unit, profile } = useApp();
 
   const date = isValidDate(params.get("date")) ? params.get("date")! : today();
   const slotParam = params.get("slot") as MealSlot | null;
@@ -67,6 +68,7 @@ export function LogView() {
   const { foods: frequent, refresh: refreshFrequent } = useFrequentFoods();
   const [customFoods, setCustomFoods] = useState<Food[] | null>(null);
   const [meals, setMeals] = useState<SavedMeal[] | null>(null);
+  const [recipes, setRecipes] = useState<Recipe[] | null>(null);
 
   // Debounced search across custom foods, the reference cache and USDA.
   const q = query.trim();
@@ -94,15 +96,16 @@ export function LogView() {
 
   useEffect(() => {
     if (tab === "mine" && customFoods === null) fetchCustomFoods().then(setCustomFoods, () => setCustomFoods([]));
+    if (tab === "recipes" && recipes === null) fetchRecipes().then(setRecipes, () => setRecipes([]));
     if (tab === "meals" && meals === null) fetchSavedMeals().then(setMeals, () => setMeals([]));
-  }, [tab, customFoods, meals]);
+  }, [tab, customFoods, meals, recipes]);
 
   // Open a food passed in the URL (e.g. after creating a custom food).
   const foodParam = params.get("food");
   useEffect(() => {
     if (!foodParam) return;
     const [kind, id] = foodParam.split(":");
-    if ((kind === "custom" || kind === "reference") && id) {
+    if ((kind === "custom" || kind === "reference" || kind === "recipe") && id) {
       fetchFood(kind, id).then((f) => f && setSelected({ food: f }));
     }
   }, [foodParam]);
@@ -156,9 +159,19 @@ export function LogView() {
       />
 
       <div className="space-y-3 px-4">
-        <Button size="lg" className="w-full" onClick={() => setScanning(true)} disabled={lookingUp}>
-          {lookingUp ? <Spinner /> : <IconBarcode />} {lookingUp ? "Looking up…" : "Scan barcode"}
-        </Button>
+        <div className="flex gap-2">
+          <Button size="lg" className="flex-1" onClick={() => setScanning(true)} disabled={lookingUp}>
+            {lookingUp ? <Spinner /> : <IconBarcode />} {lookingUp ? "Looking up…" : "Scan barcode"}
+          </Button>
+          {profile.ai_enabled && (
+            <Link
+              href={`/log/photo?slot=${slot}&date=${date}`}
+              className="bg-accent-soft text-accent flex h-14 items-center justify-center rounded-xl px-4 font-medium"
+            >
+              Photo
+            </Link>
+          )}
+        </div>
 
         <label className="border-border bg-surface focus-within:border-accent flex h-12 items-center gap-2 rounded-xl border px-3">
           <IconSearch width={20} height={20} className="text-muted" />
@@ -206,7 +219,8 @@ export function LogView() {
                 [
                   ["frequent", "Frequent"],
                   ["mine", "My foods"],
-                  ["meals", "Saved meals"],
+                  ["recipes", "Recipes"],
+                  ["meals", "Meals"],
                 ] as [Tab, string][]
               ).map(([t, label]) => (
                 <button
@@ -225,46 +239,44 @@ export function LogView() {
                   <div className="text-muted flex justify-center py-8">
                     <Spinner />
                   </div>
-                ) : frequent.filter((f) => f.kind !== "recipe").length === 0 ? (
+                ) : frequent.length === 0 ? (
                   <Empty>Foods you log will show up here for one-tap re-logging.</Empty>
                 ) : (
                   <ul className="divide-border divide-y">
-                    {frequent
-                      .filter((f) => f.kind !== "recipe")
-                      .map((f) => (
-                        <li key={f.key} className="flex items-center">
-                          <button
-                            onClick={() => setSelected({ food: frequentToFood(f), grams: f.lastGrams })}
-                            className="min-w-0 flex-1 px-4 py-2.5 text-left"
-                          >
-                            <div className="truncate text-sm">{f.name}</div>
-                            <MacroLine n={f.lastNutrients} unit={unit} />
-                          </button>
-                          <button
-                            className="bg-accent-soft text-accent mr-2 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm"
-                            aria-label={`Add ${f.name} to ${SLOT_LABELS[slot]}`}
-                            onClick={() =>
-                              logEntries(
-                                [
-                                  {
-                                    date,
-                                    slot,
-                                    kind: f.kind,
-                                    food_id: f.food_id,
-                                    name: f.name,
-                                    grams: f.lastGrams,
-                                    nutrients: f.lastNutrients,
-                                  },
-                                ],
-                                `Added ${f.name} to ${SLOT_LABELS[slot]}`,
-                              ).catch(() => toast("Could not add"))
-                            }
-                          >
-                            <IconPlus width={16} height={16} />
-                            {f.lastGrams ? `${Math.round(f.lastGrams)} g` : ""}
-                          </button>
-                        </li>
-                      ))}
+                    {frequent.map((f) => (
+                      <li key={f.key} className="flex items-center">
+                        <button
+                          onClick={() => setSelected({ food: frequentToFood(f), grams: f.lastGrams })}
+                          className="min-w-0 flex-1 px-4 py-2.5 text-left"
+                        >
+                          <div className="truncate text-sm">{f.name}</div>
+                          <MacroLine n={f.lastNutrients} unit={unit} />
+                        </button>
+                        <button
+                          className="bg-accent-soft text-accent mr-2 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm"
+                          aria-label={`Add ${f.name} to ${SLOT_LABELS[slot]}`}
+                          onClick={() =>
+                            logEntries(
+                              [
+                                {
+                                  date,
+                                  slot,
+                                  kind: f.kind,
+                                  food_id: f.food_id,
+                                  name: f.name,
+                                  grams: f.lastGrams,
+                                  nutrients: f.lastNutrients,
+                                },
+                              ],
+                              `Added ${f.name} to ${SLOT_LABELS[slot]}`,
+                            ).catch(() => toast("Could not add"))
+                          }
+                        >
+                          <IconPlus width={16} height={16} />
+                          {f.lastGrams ? `${Math.round(f.lastGrams)} g` : ""}
+                        </button>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </Card>
@@ -286,6 +298,37 @@ export function LogView() {
                     {customFoods.map((f) => (
                       <li key={f.id}>
                         <FoodRow food={f} unit={unit} onClick={() => setSelected({ food: f })} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )}
+
+            {tab === "recipes" && (
+              <Card>
+                <Link href={`/log/recipe?slot=${slot}&date=${date}`} className="border-border text-accent block border-b px-4 py-3 text-sm">
+                  + Create a recipe
+                </Link>
+                {recipes === null ? (
+                  <div className="text-muted flex justify-center py-8">
+                    <Spinner />
+                  </div>
+                ) : recipes.length === 0 ? (
+                  <Empty>Recipes are shared with everyone in the household.</Empty>
+                ) : (
+                  <ul className="divide-border divide-y">
+                    {recipes.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          onClick={() => fetchFood("recipe", r.id).then((f) => f && setSelected({ food: f }))}
+                          className="active:bg-surface-2 w-full px-4 py-2.5 text-left"
+                        >
+                          <div className="truncate text-sm">{r.name}</div>
+                          <div className="text-muted text-xs">
+                            Per serve (1 of {r.servings}) · <MacroLine n={scaleNutrients(r.nutrients, 100 / r.servings)} unit={unit} />
+                          </div>
+                        </button>
                       </li>
                     ))}
                   </ul>

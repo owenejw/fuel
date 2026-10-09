@@ -1,74 +1,63 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  addEntries,
-  deleteEntries,
-  fetchGoalFor,
-  fetchLog,
-  fetchLogRange,
-  isTrainingDay,
-  targetsFromGoal,
-  updateEntry,
-  type NewEntry,
-} from "./data";
+import { addEntries, deleteEntries, fetchLogRange, getDay, updateEntry, type NewEntry } from "./data";
 import { addDays, today } from "./dates";
 import { rankFrequentFoods, type FrequentFood } from "./frequent";
 import { cacheGet, cachePruneLogs, cacheSet } from "./offline";
-import type { DayTargets, LogEntry } from "./types";
+import type { LogEntry } from "./types";
+import type { DayBundle } from "@/server/repo";
 import { useApp } from "@/components/app-provider";
 
-/** A day's log entries with offline cache and optimistic updates. */
-export function useDayLog(date: string) {
-  const { userId } = useApp();
-  const cacheKey = `log:${date}`;
-  const [state, setState] = useState<{ key: string; entries: LogEntry[] | null }>(() => ({
+/** Everything Today needs for one date, with an offline copy and optimistic updates. */
+export function useDay(date: string) {
+  const { profileId } = useApp();
+  const cacheKey = `day:${date}`;
+  const [state, setState] = useState<{ key: string; day: DayBundle | null }>(() => ({
     key: cacheKey,
-    entries: cacheGet<LogEntry[]>(userId, cacheKey),
+    day: cacheGet<DayBundle>(profileId, cacheKey),
   }));
   const [offline, setOffline] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Switching days: show that day's cached copy immediately (adjusting state during render).
-  if (state.key !== cacheKey) setState({ key: cacheKey, entries: cacheGet<LogEntry[]>(userId, cacheKey) });
-  const entries = state.key === cacheKey ? state.entries : null;
+  if (state.key !== cacheKey) setState({ key: cacheKey, day: cacheGet<DayBundle>(profileId, cacheKey) });
+  const day = state.key === cacheKey ? state.day : null;
 
-  const setEntries = useCallback(
-    (fn: (cur: LogEntry[] | null) => LogEntry[]) =>
+  const setDay = useCallback(
+    (fn: (cur: DayBundle) => DayBundle) =>
       setState((s) => {
-        const next = fn(s.key === cacheKey ? s.entries : null);
-        cacheSet(userId, cacheKey, next);
-        return { key: cacheKey, entries: next };
+        if (s.key !== cacheKey || !s.day) return s;
+        const next = fn(s.day);
+        cacheSet(profileId, cacheKey, next);
+        return { key: cacheKey, day: next };
       }),
-    [userId, cacheKey],
+    [profileId, cacheKey],
   );
 
   const refresh = useCallback(
     () =>
-      fetchLog(date).then(
-        (data) => {
-          setEntries(() => data);
+      getDay(date).then(
+        (d) => {
+          setState({ key: cacheKey, day: d });
+          cacheSet(profileId, cacheKey, d);
           setOffline(false);
-          setError(null);
         },
-        (err) => {
-          setOffline(typeof navigator !== "undefined" && !navigator.onLine);
-          setError(err instanceof Error ? err.message : "Could not load log");
-          setState((s) => (s.key === cacheKey && s.entries === null ? { ...s, entries: [] } : s));
-        },
+        () => setOffline(true),
       ),
-    [date, cacheKey, setEntries],
+    [date, cacheKey, profileId],
   );
 
   useEffect(() => {
     refresh();
-    if (date === today()) cachePruneLogs(userId, addDays(date, -7));
-  }, [date, userId, refresh]);
+    if (date === today()) cachePruneLogs(profileId, addDays(date, -7));
+  }, [date, profileId, refresh]);
+
+  const setEntries = useCallback((fn: (e: LogEntry[]) => LogEntry[]) => setDay((d) => ({ ...d, entries: fn(d.entries) })), [setDay]);
 
   const add = useCallback(
     async (items: NewEntry[]) => {
       const saved = await addEntries(items);
-      setEntries((cur) => [...(cur ?? []), ...saved.filter((e) => e.date === date)]);
+      setEntries((cur) => [...cur, ...saved.filter((e) => e.date === date)]);
       return saved;
     },
     [date, setEntries],
@@ -76,8 +65,8 @@ export function useDayLog(date: string) {
 
   const remove = useCallback(
     async (ids: string[]) => {
-      const prev = entries ?? [];
-      setEntries(() => prev.filter((e) => !ids.includes(e.id)));
+      const prev = day?.entries ?? [];
+      setEntries((cur) => cur.filter((e) => !ids.includes(e.id)));
       try {
         await deleteEntries(ids);
       } catch (err) {
@@ -86,59 +75,36 @@ export function useDayLog(date: string) {
       }
       return prev.filter((e) => ids.includes(e.id));
     },
-    [entries, setEntries],
+    [day, setEntries],
   );
 
   const update = useCallback(
     async (id: string, patch: Parameters<typeof updateEntry>[1]) => {
       const saved = await updateEntry(id, patch);
-      setEntries((cur) => (cur ?? []).map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
+      setEntries((cur) => cur.map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
       return saved;
     },
     [date, setEntries],
   );
 
-  return { entries, loading: entries === null, offline, error, refresh, add, remove, update };
+  return { day, entries: day?.entries ?? null, loading: day === null, offline, refresh, add, remove, update, setDay };
 }
 
-/** Targets for a date: latest goal on/before that date, training vs rest day. */
-export function useTargets(date: string) {
-  const { userId } = useApp();
-  const [state, setState] = useState<{ targets: DayTargets; training: boolean; hasGoal: boolean } | null>(() =>
-    cacheGet(userId, `targets:${date}`),
-  );
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchGoalFor(date), isTrainingDay(date)])
-      .then(([goal, training]) => {
-        if (cancelled) return;
-        const next = { targets: targetsFromGoal(goal, training), training, hasGoal: !!goal };
-        setState(next);
-        cacheSet(userId, `targets:${date}`, next);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [date, userId]);
-  return state;
-}
-
-/** Foods this user has logged in the last 60 days, ranked by frequency. */
+/** Foods this profile has logged in the last 60 days, ranked by frequency. */
 export function useFrequentFoods() {
-  const { userId } = useApp();
-  const [foods, setFoods] = useState<FrequentFood[] | null>(() => cacheGet<FrequentFood[]>(userId, "frequent"));
+  const { profileId } = useApp();
+  const [foods, setFoods] = useState<FrequentFood[] | null>(() => cacheGet<FrequentFood[]>(profileId, "frequent"));
   const refresh = useCallback(() => {
     const t = today();
     return fetchLogRange(addDays(t, -60), t).then(
       (entries) => {
         const ranked = rankFrequentFoods(entries);
         setFoods(ranked);
-        cacheSet(userId, "frequent", ranked);
+        cacheSet(profileId, "frequent", ranked);
       },
       () => setFoods((f) => f ?? []),
     );
-  }, [userId]);
+  }, [profileId]);
   useEffect(() => {
     refresh();
   }, [refresh]);

@@ -176,6 +176,11 @@ function FoodSheetBody({
       </div>
 
       <NutrientTable n={nutrients} unit={unit} />
+      {food.kind === "recipe" && (
+        <Link href={`/log/recipe?id=${food.id}&slot=${slot}&date=${date}`} className="text-accent block text-sm">
+          Edit this recipe
+        </Link>
+      )}
       {food.kind === "custom" && food.source === "custom" && (
         <Link href={`/log/new-food?id=${food.id}&slot=${slot}&date=${date}`} className="text-accent block text-sm">
           Edit this food

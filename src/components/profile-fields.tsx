@@ -19,7 +19,10 @@ export const GOAL_OPTIONS: { value: GoalType; label: string }[] = [
   { value: "bulk", label: "Bulk — gain muscle" },
 ];
 
-export type ProfileDraft = Omit<Profile, "user_id">;
+export type ProfileDraft = Pick<
+  Profile,
+  "name" | "sex" | "birth_date" | "height_cm" | "activity_level" | "goal" | "energy_unit" | "training_days_per_week"
+>;
 
 export function ProfileFields({ value, onChange }: { value: ProfileDraft; onChange: (p: ProfileDraft) => void }) {
   const set = <K extends keyof ProfileDraft>(k: K, v: ProfileDraft[K]) => onChange({ ...value, [k]: v });
@@ -58,6 +61,12 @@ export function ProfileFields({ value, onChange }: { value: ProfileDraft; onChan
         value={value.activity_level}
         onChange={(v) => set("activity_level", v as ActivityLevel)}
         options={ACTIVITY_OPTIONS}
+      />
+      <Select
+        label="Training days per week"
+        value={String(value.training_days_per_week)}
+        onChange={(v) => set("training_days_per_week", Number(v))}
+        options={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
       />
       <Select label="Goal" value={value.goal} onChange={(v) => set("goal", v as GoalType)} options={GOAL_OPTIONS} />
       <Select

@@ -1,146 +1,118 @@
-# Fuel: a private nutrition tracker
+# Fuel: a household nutrition tracker
 
-A mobile-first PWA for logging food, kilojoules, macros and micronutrients. It is built for Australia: kJ by default, AFCD data and Australian NRVs. It supports any number of invite-only accounts. Each account's data is private and enforced by Postgres Row Level Security.
+Fuel is a mobile-first PWA for logging food, kilojoules, macros and micronutrients, with training-aware targets and workout fuelling. It's built for a few people sharing one household (Jez, Levi and Owen to start) and set up for Australia: kJ by default, AFCD data and Australian NRVs.
 
-**Stack:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · Supabase (auth, Postgres, RLS) · Vercel · `@zxing/browser` for barcodes · Recharts (from Phase 3).
+There is **no sign-in**. Each device picks a profile once ("Who's this?"), and a long-lived cookie remembers it. Anyone can switch profile from Settings. Data isn't private between household members. An optional household passcode can keep strangers who find the URL out.
 
-## Status
+**Stack:** Next.js 16 (App Router, server actions) · TypeScript · Tailwind v4 · Postgres (Supabase in production, embedded PGlite locally) · Recharts · `@zxing/browser` · Claude API · Vercel.
 
-| Phase | Scope | State |
-| --- | --- | --- |
-| 1 | Auth and invites, profile, food search (custom → cache → USDA), barcode scan (→ Open Food Facts), log by grams or serves, daily log by meal slot, quick add, copy yesterday or a previous meal, saved meals, edit/delete, PWA shell | ✅ |
-| 2 | TDEE (Mifflin-St Jeor), goal presets, training and rest-day targets | — |
-| 3 | Weekly trends, micronutrient dashboard vs NRVs, weight trend (EWMA), adaptive TDEE, water | — |
-| 4 | Recommendation engine, workouts, fuelling timeline, Google Calendar sync | — |
-| 5 | Claude API layer, photo logging, panel OCR, grocery list, weekly summary, push, CSV export | — |
+## Features
+
+| Area | What's there |
+| --- | --- |
+| **Logging** | Search (household foods and recipes → AFCD/cache → USDA fallback); camera barcode scan (→ Open Food Facts → USDA, with "create food" on a miss); log by grams or serves; meal slots; quick add; copy yesterday or a previous meal; saved meals; recipes (nutrition per serve); edit, delete, undo. Re-logging a frequent food takes 2 taps. |
+| **Targets** | Mifflin-St Jeor BMR × activity factor; cut/maintain/recomp/bulk presets; protein 2.0 g/kg (1.6–2.2 slider); training-day vs rest-day targets (carbs flex, protein constant, weekly average on goal). Day type comes from the workouts table, with a manual override on Today. |
+| **Trends** | Daily kJ and macro bars against each day's target, plus weekly averages. A micronutrient dashboard compares today and the 7-day average with NHMRC NRVs for your sex and age, and flags anything under 70 % all week. Weight logging with an EWMA trend (α = 0.1). Adaptive TDEE after 14+ days, shown next to the formula estimate, with "update my targets from this". Water tracking and a weekly summary. |
+| **Plan** | Manual workouts, plus Google Calendar sync via the calendar's secret iCal address (keyword matching, recurring events). A fuelling timeline per workout: meal 2–3 h before, fast carbs 30–60 min before (hard sessions or > 60 min), carbs during sessions > 90 min, and protein + carbs within 2 h after. Race carb loading at 8 g/kg for the 2 days before. Grocery list. |
+| **Suggestions** | A rule-based engine over your own last 60 days of foods and saved meals (see below). It also suggests 1–2 never-logged AFCD foods that close a flagged micronutrient gap. |
+| **AI (optional, per profile)** | Claude suggestions, photo-of-plate logging (itemised estimate you edit before saving) and nutrition-panel reading for custom foods. Runs only on the server, and only when the profile turns it on. |
+| **Other** | PWA: installable, offline copy of recent days and frequent foods. Web-push reminders for logging and pre-workout fuelling. CSV export of logs, weights and workouts. Dark mode. |
+
+Unknown nutrients are stored as absent, shown as **"no data"**, and never counted as zero. Totals that include foods missing a value show `*` and a note.
 
 ---
 
-## Local setup
-
-Requirements: Node 22+ and a Supabase project. The free tier is fine; pick the Sydney region (`ap-southeast-2`).
+## Run it locally (no setup)
 
 ```bash
 npm install
-cp .env.example .env.local   # then fill it in (see below)
-npm run dev                  # http://localhost:3000
+npm run seed:afcd     # downloads FSANZ AFCD Release 3 into the local database (~1,600 foods)
+npm run dev           # http://localhost:3000
 ```
 
-### Environment variables
+With no `DATABASE_URL`, the app uses an embedded Postgres (PGlite) stored in `.data/pglite`. Migrations run automatically. Stop `npm run dev` before running scripts that write to the local database (`seed:afcd`, `db:migrate`), because PGlite allows one process at a time.
 
-| Variable | Where it's used | Notes |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | browser + server | Project Settings → API |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser + server | The publishable key (or the legacy `anon` key via `NEXT_PUBLIC_SUPABASE_ANON_KEY`) |
-| `SUPABASE_SECRET_KEY` | **server only** | The secret / `service_role` key. Used only to write the shared reference cache, manage invites and delete accounts. |
-| `ADMIN_EMAILS` | server | Comma-separated emails that can open `/admin` to create invite codes |
-| `USDA_API_KEY` | server | Free key from <https://fdc.nal.usda.gov/api-key-signup>. Without it, the USDA fallback is skipped. |
-| `OFF_USER_AGENT` | server | Open Food Facts asks for an identifying User-Agent, e.g. `Fuel/0.1 (you@example.com)` |
-| `ANTHROPIC_API_KEY` | server | Optional, Phase 5. |
+Copy `.env.example` to `.env.local` to turn on optional features:
 
-### Supabase configuration
+| Variable | Needed for |
+| --- | --- |
+| `DATABASE_URL` | Production. Use the Supabase **transaction pooler** connection string (port 6543). |
+| `APP_PASSCODE` | Optional household passcode, asked once per device. |
+| `USDA_API_KEY` | USDA fallback search. Free key: <https://fdc.nal.usda.gov/api-key-signup> |
+| `OFF_USER_AGENT` | Open Food Facts asks for an identifying User-Agent, e.g. `Fuel/0.1 (you@example.com)`. |
+| `ANTHROPIC_API_KEY` | AI features (server-side only). |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Push reminders. Generate keys with `npx web-push generate-vapid-keys`. |
+| `CRON_SECRET` | Protects `/api/cron/reminders`. |
+| `APP_TIMEZONE` | Defaults to `Australia/Sydney`. Used for calendar events and reminders. |
 
-1. **Create the schema.** Open the SQL Editor, paste [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) and run it. If you use the Supabase CLI, run `supabase link` and then `supabase db push`.
-2. **Turn off public sign-ups.** Go to Authentication → Sign In / Providers. Keep **Email** enabled and turn off **Allow new users to sign up**. Accounts are then created only by the invite flow, which uses the server-side admin API.
-3. **URLs.** Go to Authentication → URL Configuration and set the **Site URL** to your production URL. Add these **Redirect URLs**: `http://localhost:3000/**` and `https://<your-app>.vercel.app/**`.
-4. **Email template.** Go to Authentication → Emails → **Magic Link** and replace the body so it contains both a code and a link:
+## Database (Supabase)
 
-   ```html
-   <h2>Sign in to Fuel</h2>
-   <p>Your sign-in code is <strong style="font-size:20px">{{ .Token }}</strong></p>
-   <p>Or <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">tap here to sign in</a>.</p>
-   ```
+1. Create a Supabase project, ideally in the Sydney region.
+2. Copy **Project Settings → Database → Connection string → Transaction pooler** into `DATABASE_URL`.
+3. Run `npm run db:migrate` to apply [`supabase/migrations/`](supabase/migrations). This also seeds the Jez, Levi and Owen profiles.
+4. Run `npm run seed:afcd` to import AFCD into `reference_foods`. You can also pass a local `.xlsx` path or `--dry-run`.
 
-   **Why the code matters:** an app installed on the iOS home screen has its own cookie jar. A link tapped in Mail opens Safari, not the app, so the link alone can't sign the app in. Typing the code into the app always works. The link is for desktop or browser use, and the `/auth/confirm` route verifies the `token_hash` without needing a PKCE verifier.
-5. **Email delivery.** Supabase's built-in mailer is heavily rate-limited. For more than one or two users, set up custom SMTP under Project Settings → Auth (for example Resend or Postmark).
-6. **Create your own account.** Sign-ups need an invite, and invites need an admin. To bootstrap, go to Authentication → Users → **Add user** → *Create new user* and tick *Auto confirm*. Use the email you put in `ADMIN_EMAILS`, then sign in at `/login` with the emailed code.
+**Access model.** The browser never talks to the database. Pages call Next.js server actions, which read the device's `fuel_profile` cookie and query Postgres directly as the database owner. Every table has RLS enabled with no policies, and the migration revokes all privileges from Supabase's `anon` and `authenticated` roles. That means the public Supabase REST API and anon key can't read or write anything. Supabase Auth isn't used.
 
-### Import the AFCD (Australian Food Composition Database)
+**Sharing.** Custom foods and recipes are shared by the whole household; they record who created them. Logs, weights, workouts, goals, water, saved meals, grocery lists and push subscriptions belong to one profile. Deleting a profile removes those rows, and shared foods stay.
 
-```bash
-npm run seed:afcd                              # downloads AFCD Release 3 "Nutrient profiles" from FSANZ
-npm run seed:afcd -- ./AFCD-Nutrient-profiles.xlsx   # or use a local copy
-npm run seed:afcd -- --dry-run                 # parse and print a sample, no writes
-```
-
-The script reads the **All solids & liquids per 100 g** sheet (about 1,588 foods) and upserts it into `reference_foods` with `source = 'afcd'`, so re-running it is safe. Column headers are matched by name, and the script stops with a clear error if FSANZ changes the layout. Saturated fat comes from the grams column, not the "% of total fatty acids" column. Download page: <https://www.foodstandards.gov.au/science-data/food-nutrient-databases/afcd/data-files>.
-
----
-
-## How food lookup works
+## Food data
 
 | Lookup | Order |
 | --- | --- |
-| **Text search** (`/api/foods/search`, debounced 300 ms) | 1. Your private custom foods → 2. the shared `reference_foods` cache (AFCD ranks first) → 3. **USDA FoodData Central** if the cache has fewer than 8 matches. USDA results are written into the cache so the next search is instant. |
-| **Barcode** (`/api/foods/barcode/:code`) | 1. Your custom foods with that barcode → 2. the cache → 3. **Open Food Facts v2** → 4. USDA branded foods by GTIN → on a miss, offer "Create food" pre-filled with the barcode. |
+| Text search (debounced 300 ms) | Household custom foods and recipes → `reference_foods` cache (AFCD first) → **USDA FoodData Central** when fewer than 8 cached matches. USDA results are cached, so the next search is instant. |
+| Barcode | Household custom foods → cache → **Open Food Facts v2** → USDA branded (GTIN) → offer "Create food" pre-filled with the barcode. |
 
-All nutrients are nullable. A missing value is shown as **"no data"** and never as 0. Daily, meal and slot totals show a `*` and a note when some items lack data for a nutrient. Each log entry stores a snapshot of the nutrients for the amount eaten. History therefore stays stable if a custom food is edited or a cached source record is refreshed.
+The AFCD import reads the **All solids & liquids per 100 g** sheet of the Release 3 *Nutrient profiles* workbook and matches columns by name. Saturated fat comes from the grams column, not the "% of total fatty acids" column. If FSANZ changes the layout, the import stops with a clear error.
 
-## Privacy model
+## How suggestions work
 
-* **Every user-owned table** (`profiles`, `custom_foods`, `recipes`, `meals_saved`, `log_entries`, `weights`, `workouts`, `goals`, `water_logs`) has RLS enabled with four policies for the `authenticated` role:
+1. **Candidates:** foods and saved meals you logged in the last 60 days, with your last serving size and frequency.
+2. **Score:** for each candidate, how much of a meal-sized share of each remaining protein, carb and fat gap one serve closes. Weights are the square of each gap's share of its target, so the proportionally largest gap dominates. Overshooting remaining kJ costs heavily; macro overshoot costs a little; frequency only breaks ties.
+3. **Protein mode:** when protein is the largest gap and kJ are tight (< 25 % of the target or < 1,500 kJ left), candidates rank by **protein per 100 kJ**.
+4. **Time of day:** a food is only suggested if at least 20 % of its history is in meal slots that fit the time. So no dinner foods at 7 am.
+5. **Fuelling windows:** before a session, carbs get extra weight, and fat, fibre and low-carb foods are penalised. After a session, protein and carbs are favoured.
+6. The top 5 are shown with what would be left if you ate them. 1–2 never-logged AFCD foods are added when a micronutrient is flagged for the week.
 
-  ```sql
-  for select using ((select auth.uid()) = user_id)
-  for insert with check ((select auth.uid()) = user_id)
-  for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)
-  for delete using ((select auth.uid()) = user_id)
-  ```
+## Reminders (web push)
 
-  The `anon` role has no table privileges at all.
-* **Cross-user references are impossible.** `log_entries` references `custom_foods` and `recipes` through a composite `(id, user_id)` foreign key. You can't log, or probe for, another user's food.
-* **`reference_foods`** holds only data copied from Open Food Facts, AFCD and USDA. It has **no user columns** and doesn't record who looked anything up. Any signed-in user can read it. Only the service role (server routes and the seed script) can write to it.
-* **`invites`** has RLS with no policies, so only the service role can use it. Codes are claimed atomically by `claim_invite()`. The admin page doesn't show who redeemed a code.
-* **Frequent foods, history and (later) recommendations** are computed only from the current user's own rows. RLS enforces this regardless of the client code.
-* **Account deletion** (Settings → Delete account) calls `auth.admin.deleteUser`. Every user table has `ON DELETE CASCADE` to `auth.users`, so all of that user's rows go with it. The local offline cache is wiped too.
-* The browser talks to Supabase directly with the user's JWT. Server routes use the secret key only for the reference cache, invites and account deletion.
+On iPhone, add Fuel to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so either use Vercel Pro (`crons` in `vercel.ts`) or a free external scheduler such as cron-job.org or a GitHub Actions schedule.
 
-## Offline / PWA
+## Deploy to Vercel
 
-* `src/app/manifest.ts` plus icons in `public/icons` make the app installable: on iOS, use Share → Add to Home Screen.
-* `public/sw.js` serves pages network-first with a cached fallback, and caches hashed build assets cache-first. It never caches API or Supabase responses.
-* Today's log, recent days, frequent foods, targets and the profile are cached per user in `localStorage` under keys scoped to the user ID. The cache is cleared on sign-out. When offline, Today shows the saved copy. Logging new food needs a connection.
-* The service worker registers only in production builds (`npm run build && npm start`).
+1. Push to GitHub and import the repo in Vercel; the framework preset is Next.js.
+2. Add `DATABASE_URL`, plus whichever optional variables you want, to Production and Preview.
+3. Run `npm run db:migrate` and `npm run seed:afcd` once against that `DATABASE_URL` from your machine.
+4. Open the site on each phone, pick a profile, and use Share → **Add to Home Screen**.
 
 ## Tests
 
 ```bash
-npm test                 # unit tests + RLS tests (no external services needed)
-npm run test:rls         # just the RLS suite
-npm run test:rls:live    # RLS against your real Supabase dev project (creates and deletes 2 temp users)
+npm test          # everything (no external services needed)
+npm run test:db   # schema + access tests on an in-process Postgres
 ```
 
-* `tests/db/rls.test.ts` applies the real migration to an in-process Postgres ([PGlite](https://pglite.dev)) with a small Supabase shim (`auth.uid()`, the `anon`, `authenticated` and `service_role` roles, default grants). For every user-owned table it checks that user B **cannot read, update, delete, reassign or forge** user A's rows, and that anonymous access is denied. It also checks cross-user foreign keys, `reference_foods` read-only access, invite secrecy and cascade deletion. It also fails if a new public table is added without RLS.
-* `tests/integration/rls.supabase.test.ts` runs the same checks over the network against a live project. Use a dev project; it needs email + password sign-in enabled for the temporary users.
-* `tests/unit/*` covers nutrient math (unknowns stay unknown), kJ/kcal conversion, the OFF, USDA and AFCD parsers, and frequent-food ranking. The TDEE, adaptive TDEE, macro target and recommendation scoring tests arrive with Phases 2–4.
+* `tests/db` applies the real migrations to PGlite with Supabase's `anon` and `authenticated` roles. It checks that those roles can't read or delete anything in any table, that RLS is on everywhere, that profile data is scoped and cascades on delete while shared foods survive, and that migrations re-run cleanly.
+* `tests/unit` covers TDEE, macro targets, carb loading, the EWMA weight trend, adaptive TDEE, recommendation scoring, the fuelling timeline, calendar event classification, NRVs and micronutrient flags, the OFF, USDA and AFCD parsers, and nutrient arithmetic.
 
-## Deploying to Vercel
-
-1. Push the repo to GitHub and import it in Vercel. The framework preset is Next.js and needs no build settings.
-2. Add the environment variables from the table above to Production and Preview. Don't prefix `SUPABASE_SECRET_KEY` with `NEXT_PUBLIC_`.
-3. Deploy. Then set the Supabase **Site URL** to the production domain and add `https://<domain>/**` to the Redirect URLs.
-4. Open the site on your phone, sign in, and use Share → **Add to Home Screen**.
-
-## Project layout
+## Layout
 
 ```
 src/
   app/
-    (app)/            tabbed app: Today, Log (+ new-food), Trends, Plan, Settings, Admin
-    (auth)/           login, signup (invite)
-    api/              foods/search, foods/barcode/[code], signup, invites, account, me
-    auth/confirm/     magic-link landing
-    onboarding/       first-run profile
-  components/         UI primitives, sheets, scanner, nutrition displays
-  lib/
-    foods/            parsers (OFF/USDA/AFCD), server lookup + caching
-    supabase/         browser, server and admin clients
-    data.ts           client data access (RLS-scoped)
-    nutrients.ts      nutrient definitions and null-aware math
-  proxy.ts            session refresh + auth gate (Next 16 "proxy", formerly middleware)
-supabase/migrations/  schema + RLS
-scripts/              AFCD import, icon generation
-tests/                unit, PGlite RLS, live RLS
+    (app)/            Today, Log (+ new-food, recipe, photo), Trends, Plan, Settings
+    profiles/         "Who's this?" picker
+    onboarding/       profile details
+    unlock/           optional passcode
+    api/              foods/search, foods/barcode/[code], export, cron/reminders
+  components/         UI, sheets, scanner, charts, cards
+  lib/                pure logic: nutrients, tdee, weight, nrv, recommend, fuelling, calendar, parsers
+  server/             db (Postgres/PGlite), session cookie, repo, suggestions, calendar sync, reminders
+    actions/          server actions called from the UI
+  proxy.ts            passcode gate + profile redirect
+supabase/migrations/  schema
+scripts/              db:migrate, seed:afcd, icons
+tests/                unit + db
 ```
 
-**Later: Capacitor.** All data access goes through `src/lib/data.ts` and the `/api` routes, and the UI is client-rendered. That lets the app be wrapped with Capacitor, with HealthKit added as a new workout/weight `source`, without restructuring.
+**Later: Capacitor + HealthKit.** The UI is client-rendered and all data flows through server actions. A Capacitor shell can wrap the deployed site and feed HealthKit workouts and weights through the existing `workouts.source = 'healthkit'` and `weights` tables.

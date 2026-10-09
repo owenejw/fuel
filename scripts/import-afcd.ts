@@ -6,12 +6,14 @@
  *   npm run seed:afcd -- ./path/to/file.xlsx
  *   npm run seed:afcd -- --dry-run          # parse only, print a sample
  *
- * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (in .env.local).
+ * Writes to DATABASE_URL (from .env.local), or the local PGlite database when unset.
  */
 import { config } from "dotenv";
 import ExcelJS from "exceljs";
-import { createClient } from "@supabase/supabase-js";
 import { mapAfcdHeaders, parseAfcdRow, type ReferenceFoodRow } from "../src/lib/foods/parsers";
+import { UPSERT_REFERENCE_FOODS } from "../src/lib/foods/sql";
+import { runMigrations } from "../src/server/migrations";
+import { openScriptDb } from "./script-db";
 
 config({ path: ".env.local" });
 config();
@@ -77,18 +79,14 @@ async function main() {
     return;
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY in .env.local");
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-
+  const db = await openScriptDb();
+  await runMigrations(db, console.log);
   const BATCH = 250;
   for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const { error } = await supabase.from("reference_foods").upsert(batch, { onConflict: "source,source_id" });
-    if (error) throw new Error(`Upsert failed at row ${i}: ${error.message}`);
+    await db.query(UPSERT_REFERENCE_FOODS, [JSON.stringify(rows.slice(i, i + BATCH))]);
     process.stdout.write(`\rImported ${Math.min(i + BATCH, rows.length)}/${rows.length}`);
   }
+  await db.close();
   console.log("\nDone.");
 }
 

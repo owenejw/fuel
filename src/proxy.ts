@@ -1,45 +1,36 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/env";
+import { PASS_COOKIE } from "@/lib/passcode";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/offline", "/setup"];
+/** Paths reachable without a chosen profile. */
+const OPEN_PATHS = ["/profiles", "/unlock", "/offline", "/api/cron"];
 
-/** Refreshes the Supabase session cookie and keeps signed-out visitors on public pages. */
+async function sha256(text: string) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * - Optional household passcode (APP_PASSCODE): asked once per device.
+ * - Devices that haven't picked a profile are sent to the profile picker.
+ */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const open = (p: string) => pathname === p || pathname.startsWith(`${p}/`);
 
-  if (!isSupabaseConfigured) {
-    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
-    return isPublic ? NextResponse.next() : NextResponse.redirect(new URL("/setup", request.url));
+  const passcode = process.env.APP_PASSCODE;
+  if (passcode && !open("/unlock") && !open("/api/cron")) {
+    const ok = request.cookies.get(PASS_COOKIE)?.value === (await sha256(`fuel:${passcode}`));
+    if (!ok) {
+      if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Locked" }, { status: 401 });
+      return NextResponse.redirect(new URL(`/unlock?next=${encodeURIComponent(pathname)}`, request.url));
+    }
   }
 
-  let response = NextResponse.next({ request });
-  const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll: (toSet, headers) => {
-        toSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        toSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-        Object.entries(headers ?? {}).forEach(([k, v]) => response.headers.set(k, v));
-      },
-    },
-  });
-
-  const { data } = await supabase.auth.getClaims();
-  const signedIn = Boolean(data?.claims?.sub);
-
-  if (!signedIn && !isPublic) {
-    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-    const url = new URL("/login", request.url);
-    if (pathname !== "/") url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+  if (!request.cookies.get("fuel_profile") && !OPEN_PATHS.some(open)) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "No profile selected" }, { status: 401 });
+    return NextResponse.redirect(new URL("/profiles", request.url));
   }
-  if (signedIn && (pathname === "/login" || pathname === "/signup")) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

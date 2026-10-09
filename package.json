@@ -9,22 +9,24 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "format": "prettier --write src tests scripts",
-    "test": "vitest run tests/unit tests/db",
-    "test:rls": "vitest run tests/db",
-    "test:rls:live": "RUN_SUPABASE_RLS_TESTS=1 vitest run tests/integration",
+    "test": "vitest run",
     "seed:afcd": "tsx scripts/import-afcd.ts",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "test:db": "vitest run tests/db",
+    "db:migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.3",
+    "@anthropic-ai/sdk": "^0.132.1",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "next": "16.4.0",
+    "node-ical": "^0.27.3",
+    "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recharts": "^3.10.1",
     "server-only": "^0.0.1",
+    "web-push": "^3.6.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -33,6 +35,7 @@
     "@types/node": "^24.19.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "dotenv": "^18.0.6",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",

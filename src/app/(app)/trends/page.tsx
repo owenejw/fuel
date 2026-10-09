@@ -1,10 +1,8 @@
-import { PageHeader } from "@/components/ui";
+import { TrendsView } from "./trends-view";
+
+// Rendered on the client from the device's chosen profile; nothing to prerender.
+export const instant = false;
 
 export default function TrendsPage() {
-  return (
-    <>
-      <PageHeader title="Trends" />
-      <p className="text-muted px-4 text-sm">Weekly trends, micronutrients and weight arrive in Phase 3.</p>
-    </>
-  );
+  return <TrendsView />;
 }

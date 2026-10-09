@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { FoodSheet } from "@/components/food-sheet";
+import { FuellingCard } from "@/components/fuelling-card";
+import { SuggestionsCard } from "@/components/suggestions-card";
+import { WaterCard } from "@/components/water-card";
+import { fluidTargetMl } from "@/lib/nrv";
+import { setDayType } from "@/lib/data";
+import type { Food } from "@/lib/types";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
@@ -13,8 +20,7 @@ import { useToast } from "@/components/toast";
 import { Button, Card, Input, PageHeader, Sheet, Spinner } from "@/components/ui";
 import { copyEntries, entryToNew, fetchRecentMeals, saveMeal } from "@/lib/data";
 import { addDays, friendlyDate, isValidDate, today } from "@/lib/dates";
-import { useDayLog, useTargets } from "@/lib/hooks";
-import { DEFAULT_TARGETS } from "@/lib/data";
+import { useDay } from "@/lib/hooks";
 import { sumNutrients, combineTotals } from "@/lib/nutrients";
 import { defaultSlot } from "@/lib/slots";
 import { MEAL_SLOTS, SLOT_LABELS, type LogEntry, type MealSlot } from "@/lib/types";
@@ -25,11 +31,14 @@ export function TodayView() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
-  const { unit } = useApp();
+  const { unit, profile } = useApp();
   const dateParam = params.get("date");
   const date = isValidDate(dateParam) ? dateParam : today();
-  const { entries, loading, offline, add, remove, update, refresh } = useDayLog(date);
-  const targetState = useTargets(date);
+  const { day, entries, loading, offline, add, remove, update, refresh, setDay } = useDay(date);
+  const [version, setVersion] = useState(0);
+  const [openFood, setOpenFood] = useState<Food | null>(null);
+  const [nowMin] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
+  const isToday = date === today();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
   const [quick, setQuick] = useState<{ slot: MealSlot; entry?: LogEntry } | null>(null);
@@ -48,6 +57,7 @@ export function TodayView() {
 
   async function handleDelete(ids: string[]) {
     const removed = await remove(ids);
+    setVersion((v) => v + 1);
     toast(removed.length === 1 ? "Entry deleted" : `${removed.length} entries deleted`, {
       label: "Undo",
       onClick: () => add(removed.map((e) => entryToNew(e))).catch(() => toast("Could not restore")),
@@ -92,12 +102,35 @@ export function TodayView() {
 
       <div className="space-y-3 px-4">
         {offline && <p className="bg-surface-2 text-muted rounded-xl px-3 py-2 text-sm">Offline — showing your saved copy.</p>}
-        <DaySummary totals={dayTotals} targets={targetState?.targets ?? DEFAULT_TARGETS} unit={unit} training={targetState?.training} />
-        {targetState && !targetState.hasGoal && (
-          <Link href="/settings#targets" className="bg-accent-soft text-accent block rounded-xl px-3 py-2 text-sm">
-            Using placeholder targets — set your own in Settings.
-          </Link>
-        )}
+        {day ? (
+          <>
+            <DaySummary totals={dayTotals} targets={day.plan.targets} unit={unit} training={day.plan.training} />
+            <DayTypeToggle
+              value={day.plan.dayTypeOverridden ? day.plan.dayType : null}
+              auto={day.plan.workouts.some((w) => w.type !== "rest") ? "training" : "rest"}
+              onChange={async (t) => {
+                await setDayType(date, t);
+                await refresh();
+              }}
+            />
+            {day.plan.carbLoadingFor && (
+              <p className="bg-accent-soft text-accent rounded-xl px-3 py-2 text-sm">
+                Carb loading for {day.plan.carbLoadingFor}: carbs raised to {day.plan.targets.carbs_g} g today.
+              </p>
+            )}
+            {day.plan.source === "placeholder" && (
+              <Link href="/onboarding" className="bg-accent-soft text-accent block rounded-xl px-3 py-2 text-sm">
+                Using placeholder targets — add your height, birth date and weight to get personal ones.
+              </Link>
+            )}
+            {day.plan.source === "estimated" && (
+              <Link href="/settings#targets" className="bg-surface-2 text-muted block rounded-xl px-3 py-2 text-sm">
+                Targets estimated from your profile. Review or save them in Settings.
+              </Link>
+            )}
+            <FuellingCard items={day.fuelling} workouts={day.plan.workouts} nowMin={nowMin} isToday={isToday} />
+          </>
+        ) : null}
 
         {loading ? (
           <div className="text-muted flex justify-center py-10">
@@ -125,9 +158,46 @@ export function TodayView() {
                 onMenu={() => setMenuSlot(slot)}
               />
             ))}
+            {day && (
+              <WaterCard
+                date={date}
+                ml={day.waterMl}
+                target={fluidTargetMl(profile.sex)}
+                onChange={(ml) => setDay((d) => ({ ...d, waterMl: ml }))}
+              />
+            )}
+            {isToday && (
+              <SuggestionsCard
+                date={date}
+                slot={defaultSlot()}
+                unit={unit}
+                aiEnabled={profile.ai_enabled}
+                version={version}
+                onOpenFood={setOpenFood}
+                onAdd={async (items, label) => {
+                  await add(items);
+                  setVersion((v) => v + 1);
+                  toast(`Added ${label}`);
+                }}
+              />
+            )}
           </>
         )}
       </div>
+
+      <FoodSheet
+        food={openFood}
+        onClose={() => setOpenFood(null)}
+        date={date}
+        slot={defaultSlot()}
+        unit={unit}
+        onAdd={async (e) => {
+          await add([e]);
+          setOpenFood(null);
+          setVersion((v) => v + 1);
+          toast(`Added to ${SLOT_LABELS[e.slot]}`);
+        }}
+      />
 
       <EntrySheet
         entry={editing}
@@ -315,5 +385,36 @@ function MenuItem({ children, onClick, className }: { children: React.ReactNode;
     <button onClick={onClick} className={`active:bg-surface-2 block w-full px-4 py-3.5 text-left ${className ?? ""}`}>
       {children}
     </button>
+  );
+}
+
+function DayTypeToggle({
+  value,
+  auto,
+  onChange,
+}: {
+  value: "training" | "rest" | null;
+  auto: "training" | "rest";
+  onChange: (t: "training" | "rest" | null) => void;
+}) {
+  const opts: { v: "training" | "rest" | null; label: string }[] = [
+    { v: null, label: `Auto (${auto})` },
+    { v: "training", label: "Training" },
+    { v: "rest", label: "Rest" },
+  ];
+  return (
+    <div className="bg-surface-2 flex rounded-xl p-1 text-xs" role="radiogroup" aria-label="Day type">
+      {opts.map((o) => (
+        <button
+          key={String(o.v)}
+          role="radio"
+          aria-checked={value === o.v}
+          onClick={() => onChange(o.v)}
+          className={`h-8 flex-1 rounded-lg ${value === o.v ? "bg-surface font-medium shadow-sm" : "text-muted"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }

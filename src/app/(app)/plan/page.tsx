@@ -1,10 +1,8 @@
-import { PageHeader } from "@/components/ui";
+import { PlanView } from "./plan-view";
+
+// Rendered on the client from the device's chosen profile; nothing to prerender.
+export const instant = false;
 
 export default function PlanPage() {
-  return (
-    <>
-      <PageHeader title="Plan" />
-      <p className="text-muted px-4 text-sm">Workouts and fuelling timelines arrive in Phase 4.</p>
-    </>
-  );
+  return <PlanView />;
 }

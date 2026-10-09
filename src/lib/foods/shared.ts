@@ -22,7 +22,8 @@ export function nutrientsFor(food: Food, grams: number): Nutrients {
 }
 
 export const SOURCE_LABELS: Record<Food["source"], string> = {
-  custom: "My food",
+  custom: "Household food",
+  recipe: "Recipe",
   afcd: "AFCD",
   off: "Open Food Facts",
   usda: "USDA",

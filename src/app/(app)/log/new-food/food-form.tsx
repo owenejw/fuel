@@ -8,6 +8,8 @@ import { Button, Card, Input, PageHeader, cx } from "@/components/ui";
 import { deleteCustomFood, fetchFood, saveCustomFood, type CustomFoodInput } from "@/lib/data";
 import { fromUnit, toUnit, unitLabel } from "@/lib/energy";
 import { NUTRIENTS, PANEL_KEYS, round, type NutrientKey, type Nutrients } from "@/lib/nutrients";
+import { fileToDataUrl } from "@/lib/image";
+import { readNutritionPanel } from "@/server/actions/ai";
 
 type Basis = "100g" | "serve";
 
@@ -15,7 +17,30 @@ type Basis = "100g" | "serve";
 export function FoodForm() {
   const params = useSearchParams();
   const router = useRouter();
-  const { unit } = useApp();
+  const { unit, profile } = useApp();
+  const [reading, setReading] = useState(false);
+
+  async function readPanel(file: File) {
+    setReading(true);
+    setError(null);
+    try {
+      const r = await readNutritionPanel(await fileToDataUrl(file, 1600, 0.9));
+      if (r.name && !name) setName(r.name);
+      if (r.brand && !brand) setBrand(r.brand);
+      if (r.serve_size_g) setServeSize(String(r.serve_size_g));
+      setBasis("100g");
+      const v: Partial<Record<NutrientKey, string>> = {};
+      for (const [k, n] of Object.entries(r.per100) as [NutrientKey, number | null][]) {
+        if (n != null) v[k] = String(k === "energy_kj" ? Math.round(toUnit(n, unit)) : round(n, 2));
+      }
+      setValues(v);
+      setMore(Object.keys(v).some((k) => !PANEL_KEYS.includes(k as NutrientKey)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't read the panel");
+    } finally {
+      setReading(false);
+    }
+  }
   const editId = params.get("id");
 
   const [name, setName] = useState(params.get("name") ?? "");
@@ -120,6 +145,22 @@ export function FoodForm() {
         title={editId ? "Edit food" : "Create food"}
       />
       <form onSubmit={submit} className="space-y-4 px-4">
+        {profile.ai_enabled && (
+          <label className="bg-accent-soft text-accent flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium">
+            {reading ? "Reading panel…" : "📷 Photograph the nutrition panel"}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              disabled={reading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) readPanel(f);
+              }}
+            />
+          </label>
+        )}
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
         <div className="grid grid-cols-2 gap-3">
           <Input label="Brand (optional)" value={brand} onChange={(e) => setBrand(e.target.value)} />

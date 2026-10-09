@@ -23,6 +23,7 @@ export function cacheSet(userId: string, key: string, value: unknown) {
 }
 
 export function cacheClearAll() {
+  // Clears every profile's offline data on this device.
   try {
     for (const k of Object.keys(localStorage)) if (k.startsWith(PREFIX)) localStorage.removeItem(k);
   } catch {

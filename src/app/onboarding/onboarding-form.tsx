@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
 import { Button, Input } from "@/components/ui";
-import { saveProfile } from "@/lib/data";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { saveProfile } from "@/server/actions/profile";
+import { saveWeight } from "@/server/actions/plan";
 import { today } from "@/lib/dates";
 
 export function OnboardingForm() {
   const router = useRouter();
-  const { userId, profile, setProfile } = useApp();
+  const { profile, setProfile } = useApp();
   const [draft, setDraft] = useState<ProfileDraft>({ ...profile });
   const [weight, setWeight] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,15 +22,9 @@ export function OnboardingForm() {
     setBusy(true);
     setError(null);
     try {
-      const p = { ...draft, user_id: userId };
-      await saveProfile(p);
-      if (weight) {
-        const { error } = await supabaseBrowser()
-          .from("weights")
-          .upsert({ user_id: userId, date: today(), kg: Number(weight) }, { onConflict: "user_id,date" });
-        if (error) throw new Error(error.message);
-      }
-      setProfile(p);
+      const saved = await saveProfile({ ...profile, ...draft });
+      if (weight) await saveWeight(today(), Number(weight));
+      setProfile(saved);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -40,8 +34,8 @@ export function OnboardingForm() {
 
   return (
     <main className="pt-safe mx-auto max-w-md px-5 py-8">
-      <h1 className="text-2xl font-semibold">Welcome</h1>
-      <p className="text-muted mt-1 mb-6">A few details to set sensible targets. You can change these any time in Settings.</p>
+      <h1 className="text-2xl font-semibold">Hi {profile.name}</h1>
+      <p className="text-muted mt-1 mb-6">A few details to calculate your targets. You can change these any time in Settings.</p>
       <form onSubmit={submit} className="space-y-4">
         <ProfileFields value={draft} onChange={setDraft} />
         <Input
@@ -56,8 +50,11 @@ export function OnboardingForm() {
         />
         {error && <p className="text-danger text-sm">{error}</p>}
         <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? "Saving…" : "Get started"}
+          {busy ? "Saving…" : "Save and continue"}
         </Button>
+        <button type="button" className="text-muted w-full text-sm" onClick={() => router.replace("/")}>
+          Skip for now
+        </button>
       </form>
     </main>
   );
