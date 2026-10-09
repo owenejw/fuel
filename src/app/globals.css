@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Colour tokens. Light by default, dark via prefers-color-scheme. */
+:root {
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f4;
+  --border: #e3e6ea;
+  --text: #121417;
+  --muted: #5f6b76;
+  --accent: #0f766e;
+  --accent-soft: #ccfbf1;
+  --accent-text: #ffffff;
+  --danger: #c2410c;
+  --warn: #b45309;
+  --protein: #2563eb;
+  --carbs: #d97706;
+  --fat: #db2777;
+  --fibre: #16a34a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0d0f;
+    --surface: #15181b;
+    --surface-2: #1d2125;
+    --border: #2a2f35;
+    --text: #eef1f4;
+    --muted: #97a3ae;
+    --accent: #2dd4bf;
+    --accent-soft: #123b37;
+    --accent-text: #04201d;
+    --danger: #fb923c;
+    --warn: #fbbf24;
+    --protein: #60a5fa;
+    --carbs: #fbbf24;
+    --fat: #f472b6;
+    --fibre: #4ade80;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-protein: var(--protein);
+  --color-carbs: var(--carbs);
+  --color-fat: var(--fat);
+  --color-fibre: var(--fibre);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  overscroll-behavior-y: none;
+}
+
+/* Inputs at 16px stop iOS Safari zooming on focus. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
