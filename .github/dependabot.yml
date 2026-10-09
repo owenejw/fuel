@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    # Major upgrades (e.g. TypeScript 7, ESLint 10) are done deliberately, not by bot.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
