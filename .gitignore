@@ -41,3 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /.data
+
+# iCloud Drive conflict copies (e.g. "tsconfig 2.json")
+* 2
+* 2.*
