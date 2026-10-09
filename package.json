@@ -15,7 +15,8 @@
     "test:db": "vitest run tests/db",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:migrate:deploy": "tsx scripts/migrate.ts --deploy",
-    "setup": "npm install && npm run seed:afcd"
+    "setup": "npm install && npm run seed:afcd",
+    "test:postgres": "vitest run tests/integration"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

@@ -1,11 +1,12 @@
 /** Database connection for CLI scripts (same rules as the app: DATABASE_URL or local PGlite). */
 import type { Queryable } from "../src/server/migrations";
+import { POSTGRES_TYPES } from "../src/server/pg-types";
 
 export async function openScriptDb(): Promise<Queryable & { close: () => Promise<void> }> {
   const url = process.env.DATABASE_URL;
   if (url) {
     const postgres = (await import("postgres")).default;
-    const sql = postgres(url, { prepare: false, max: 1, onnotice: () => undefined });
+    const sql = postgres(url, { prepare: false, max: 1, onnotice: () => undefined, types: POSTGRES_TYPES });
     return {
       exec: (s) => sql.unsafe(s),
       query: async <T>(s: string, p: unknown[] = []) => (await sql.unsafe(s, p as never[])) as unknown as T[],
