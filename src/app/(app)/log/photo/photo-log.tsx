@@ -107,8 +107,8 @@ export function PhotoLog() {
           <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on AI features in Settings to use photo logging.</p>
         )}
         <label className="border-border bg-surface block cursor-pointer overflow-hidden rounded-2xl border border-dashed text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element -- local data URL from the camera
             <img src={photo} alt="Your meal" className="max-h-72 w-full object-cover" />
           ) : (
             <div className="text-muted p-10">Tap to take or choose a photo</div>

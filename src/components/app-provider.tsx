@@ -51,21 +51,34 @@ function Loading() {
   );
 }
 
+function cachedProfile(): Profile | null {
+  try {
+    const id = localStorage.getItem(LAST);
+    return id ? cacheGet<Profile>(id, "profile") : null;
+  } catch {
+    return null;
+  }
+}
+
 function ClientAppProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [profile, setProfileState] = useState<Profile | null>(() => {
-    try {
-      const id = localStorage.getItem(LAST);
-      return id ? cacheGet<Profile>(id, "profile") : null;
-    } catch {
-      return null;
-    }
-  });
+  // The cached profile is only trusted offline; online, the server confirms it
+  // first (it may have been deleted or the device switched elsewhere).
+  const [profile, setProfileState] = useState<Profile | null>(() => (navigator.onLine ? null : cachedProfile()));
 
   useEffect(() => {
     getMe().then(
       (p) => {
-        if (!p) return router.replace("/profiles");
+        if (!p) {
+          // Stale device: forget the cached profile so it isn't shown again.
+          setProfileState(null);
+          try {
+            localStorage.removeItem(LAST);
+          } catch {
+            // ignore
+          }
+          return router.replace("/profiles");
+        }
         setProfileState(p);
         cacheSet(p.id, "profile", p);
         try {
@@ -74,7 +87,7 @@ function ClientAppProvider({ children }: { children: ReactNode }) {
           // ignore
         }
       },
-      () => undefined, // offline: keep the cached profile
+      () => setProfileState((cur) => cur ?? cachedProfile()), // unreachable: fall back to the offline copy
     );
   }, [router]);
 
