@@ -25,7 +25,12 @@ export async function createProfile(name: string) {
 /** The profile this device is using, or null (the client then shows the picker). */
 export async function getMe(): Promise<Profile | null> {
   const id = await currentProfileId();
-  if (!id) return null;
+  if (!id) {
+    // The cookie may point at a profile that no longer exists; drop it so the
+    // proxy sends this device to the picker.
+    await forgetProfile();
+    return null;
+  }
   await rememberProfile(id); // slide the cookie expiry forward
   return getProfile(id);
 }
