@@ -10,18 +10,18 @@ import { SuggestionsCard } from "@/components/suggestions-card";
 import { AvatarLink, BigStat, MiniBars, Tile, WeekStrip } from "@/components/summary";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/ui";
-import { addWater, fetchLoggedDays } from "@/lib/data";
-import { addDays, friendlyDate, today } from "@/lib/dates";
+import { addWater } from "@/lib/data";
+import { friendlyDate, today } from "@/lib/dates";
 import { toUnit, unitLabel } from "@/lib/energy";
 import { fmtMin } from "@/lib/fuelling";
 import { greeting } from "@/lib/greeting";
-import { useDay, useWeek } from "@/lib/hooks";
+import { useDay, type WeekDay } from "@/lib/hooks";
 import { fluidTargetMl } from "@/lib/nrv";
 import { sumNutrients } from "@/lib/nutrients";
 import { defaultSlot } from "@/lib/slots";
 import { computeStreak } from "@/lib/streak";
 import { SLOT_LABELS, WORKOUT_LABELS, type Food, type LogEntry, type Workout } from "@/lib/types";
-import { fetchWeights } from "@/server/actions/plan";
+import { fetchSummary } from "@/server/actions/summary";
 
 const kj = (n: number, unit: "kj" | "kcal") => Math.round(toUnit(n, unit)).toLocaleString("en-AU");
 
@@ -32,22 +32,18 @@ export function TodayView() {
   const date = today();
   const { day, entries, add, remove, setDay } = useDay(date);
   const [version, setVersion] = useState(0);
-  const week = useWeek(date, version + (entries?.length ?? 0));
+
   const [openFood, setOpenFood] = useState<Food | null>(null);
   const [now] = useState(() => new Date());
 
-  const [loggedDays, setLoggedDays] = useState<string[] | null>(null);
-  const [weights, setWeights] = useState<{ date: string; kg: number }[] | null>(null);
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchSummary>> | null>(null);
   const entryCount = entries?.length ?? 0;
   useEffect(() => {
-    fetchLoggedDays(date).then(setLoggedDays, () => undefined);
-  }, [date, entryCount]);
-  useEffect(() => {
-    fetchWeights(addDays(date, -30), date).then(
-      (w) => setWeights(w.map((x) => ({ date: String(x.date).slice(0, 10), kg: Number(x.kg) }))),
-      () => setWeights([]),
-    );
-  }, [date]);
+    fetchSummary(date).then(setSummary, () => undefined);
+  }, [date, entryCount, version]);
+  const week = summary?.week ?? null;
+  const weights = summary?.weights ?? null;
+  const loggedDays = summary?.loggedDays ?? null;
   const streak = useMemo(() => (loggedDays ? computeStreak(loggedDays, date) : null), [loggedDays, date]);
 
   const t = useMemo(() => sumNutrients((entries ?? []).map((e) => e.nutrients)).totals, [entries]);
@@ -280,7 +276,7 @@ function WaterTile({ ml, target, onAdd }: { ml: number; target: number; onAdd: (
   );
 }
 
-function WeekAverage({ week, unit }: { week: ReturnType<typeof useWeek>; unit: "kj" | "kcal" }) {
+function WeekAverage({ week, unit }: { week: WeekDay[] | null; unit: "kj" | "kcal" }) {
   if (!week) return <Spinner className="text-muted mt-2" />;
   const logged = week.filter((d) => d.logged);
   const avg = logged.length ? logged.reduce((a, d) => a + (d.totals.energy_kj ?? 0), 0) / logged.length : 0;
