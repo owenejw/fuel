@@ -245,7 +245,7 @@ function MicrosTab({ data }: { data: Trends }) {
                   )}
                 </span>
                 <span className="tabular text-muted text-xs">
-                  {m.limit ? "limit" : m.basis} {formatAmount(m.target, m.key)}
+                  {m.limit ? "limit" : m.basis === "AI" ? "target" : m.basis} {formatAmount(m.target, m.key)}
                 </span>
               </div>
               <div className="mt-1 grid grid-cols-[3.5rem_1fr_4.5rem] items-center gap-2 text-xs">

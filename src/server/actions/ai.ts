@@ -9,7 +9,8 @@ import { candidatesFor } from "../suggestions";
 import { requireProfileId } from "../session";
 
 // Google Gemini, on the free tier. https://ai.google.dev/gemini-api/docs/pricing
-const MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+// Tried in order: the free tier sometimes returns 503 "high demand" for one model while others answer.
+const MODELS = process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 const ENDPOINT = (model: string) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
 /** Whether the server has an AI key, so Settings can say so instead of failing later. */
@@ -20,8 +21,8 @@ export async function aiAvailable(): Promise<boolean> {
 async function requireAi() {
   const pid = await requireProfileId();
   const profile = await getProfile(pid);
-  if (!process.env.GEMINI_API_KEY) throw new Error("AI features need GEMINI_API_KEY set on the server.");
-  if (!profile?.ai_enabled) throw new Error("Turn on AI features in Settings first.");
+  if (!process.env.GEMINI_API_KEY) throw new Error("This feature isn't set up on the server yet (GEMINI_API_KEY).");
+  if (!profile?.ai_enabled) throw new Error('Turn on "Meal ideas & photo logging" in Settings first.');
   return { pid, profile };
 }
 
@@ -42,31 +43,38 @@ type Part = { text: string } | { inlineData: { mimeType: string; data: string } 
 /** One JSON-mode call, validated against the zod schema. */
 async function ask<T extends z.ZodType>(schema: T, responseSchema: GSchema, parts: Part[] | string, system: string) {
   await requireAi();
-  const res = await fetch(ENDPOINT(MODEL), {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: typeof parts === "string" ? [{ text: parts }] : parts }],
-      generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.4 },
-    }),
-    signal: AbortSignal.timeout(90_000),
+  const request = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: typeof parts === "string" ? [{ text: parts }] : parts }],
+    generationConfig: { responseMimeType: "application/json", responseSchema, temperature: 0.4 },
   });
-  if (res.status === 429) throw new Error("The free AI limit has been reached for now — try again later.");
+  let res!: Response;
+  for (const model of MODELS) {
+    res = await fetch(ENDPOINT(model), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY! },
+      body: request,
+      signal: AbortSignal.timeout(90_000),
+    });
+    // Overloaded, rate-limited or retired: try the next model.
+    if (![404, 429, 500, 503].includes(res.status)) break;
+    console.warn(`Gemini ${model} returned ${res.status}; trying the next model`);
+  }
+  if (res.status === 429) throw new Error("The free daily limit has been reached for now — try again later.");
   if (!res.ok) {
     console.error("Gemini error", res.status, (await res.text()).slice(0, 500));
-    throw new Error("The AI service couldn't answer — try again.");
+    throw new Error("Couldn't get an answer right now — try again.");
   }
   const body = (await res.json()) as {
     promptFeedback?: { blockReason?: string };
     candidates?: { finishReason?: string; content?: { parts?: { text?: string }[] } }[];
   };
-  if (body.promptFeedback?.blockReason) throw new Error("The AI service declined this request.");
+  if (body.promptFeedback?.blockReason) throw new Error("That request couldn't be answered.");
   const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   try {
     return schema.parse(JSON.parse(text)) as z.infer<T>;
   } catch {
-    throw new Error("Couldn't read the AI's answer — try again.");
+    throw new Error("Couldn't read the answer — try again.");
   }
 }
 

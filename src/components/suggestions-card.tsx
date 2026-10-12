@@ -148,13 +148,13 @@ export function SuggestionsCard({
                       const now = new Date();
                       setAi(await aiSuggest(date, now.getHours() * 60 + now.getMinutes()));
                     } catch (err) {
-                      setAiError(err instanceof Error ? err.message : "The AI couldn't answer");
+                      setAiError(err instanceof Error ? err.message : "Couldn't get ideas right now");
                     } finally {
                       setAiBusy(false);
                     }
                   }}
                 >
-                  {aiBusy ? <Spinner className="h-4 w-4" /> : <IconBolt width={16} height={16} />} Ask AI what to eat
+                  {aiBusy ? <Spinner className="h-4 w-4" /> : <IconBolt width={16} height={16} />} Get meal ideas
                 </Button>
               )}
               {aiError && <p className="text-danger mt-2 text-sm">{aiError}</p>}

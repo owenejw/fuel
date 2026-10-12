@@ -104,7 +104,7 @@ export function PhotoLog() {
       />
       <div className="space-y-3 px-4">
         {!profile.ai_enabled && (
-          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on AI features in Settings to use photo logging.</p>
+          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on "Meal ideas & photo logging" in Settings to use this.</p>
         )}
         <label className="border-border bg-surface block cursor-pointer overflow-hidden rounded-2xl border border-dashed text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -130,7 +130,7 @@ export function PhotoLog() {
         {photo && !items && (
           <>
             <Input
-              label="Anything the AI should know? (optional)"
+              label="Anything else to know? (optional)"
               placeholder="e.g. cooked in olive oil, large bowl"
               value={note}
               onChange={(e) => setNote(e.target.value)}

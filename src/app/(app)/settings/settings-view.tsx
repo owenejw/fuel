@@ -305,14 +305,14 @@ function AiSection({ profile, save }: { profile: Profile; save: SaveFn }) {
     aiAvailable().then(setAvailable, () => setAvailable(false));
   }, []);
   return (
-    <Section title="AI features" icon={IconSparkles}>
+    <Section title="Meal ideas & photo logging" icon={IconSparkles}>
       <Card className="p-4">
         {available === false ? (
-          <p className="text-muted text-sm">AI isn&apos;t set up on this server yet. It needs a free Gemini key (see the README).</p>
+          <p className="text-muted text-sm">This isn&apos;t set up on the server yet. It needs a free Gemini key (see the README).</p>
         ) : (
           <Toggle
-            label="AI suggestions, photo logging and label reading"
-            hint="Uses Google Gemini's free tier. Sends today's totals, targets, workouts, frequent foods and any photos you take to Google, which may use them to improve its products."
+            label="Meal ideas, photo logging and label reading"
+            hint="Sends today's totals, targets, workouts, frequent foods and any photos you take to Google to work these out. Google may use them to improve its products."
             checked={profile.ai_enabled}
             onChange={(v) => save({ ai_enabled: v })}
           />
