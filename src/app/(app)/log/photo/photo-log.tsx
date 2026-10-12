@@ -16,7 +16,7 @@ import { estimatePlate, type PlateEstimate } from "@/server/actions/ai";
 
 type Item = PlateEstimate["items"][number];
 
-/** Photo of a plate → Claude estimates items and grams → user edits → saved as entries. */
+/** Photo of a plate → AI estimates items and grams → user edits → saved as entries. */
 export function PhotoLog() {
   const router = useRouter();
   const params = useSearchParams();
@@ -130,7 +130,7 @@ export function PhotoLog() {
         {photo && !items && (
           <>
             <Input
-              label="Anything Claude should know? (optional)"
+              label="Anything the AI should know? (optional)"
               placeholder="e.g. cooked in olive oil, large bowl"
               value={note}
               onChange={(e) => setNote(e.target.value)}

@@ -20,7 +20,7 @@ function readOpen() {
   }
 }
 
-/** Rule-based suggestions (top 5) plus optional Claude suggestions. */
+/** Rule-based suggestions (top 5) plus optional AI suggestions. */
 export function SuggestionsCard({
   date,
   slot,
@@ -148,13 +148,13 @@ export function SuggestionsCard({
                       const now = new Date();
                       setAi(await aiSuggest(date, now.getHours() * 60 + now.getMinutes()));
                     } catch (err) {
-                      setAiError(err instanceof Error ? err.message : "Claude couldn't answer");
+                      setAiError(err instanceof Error ? err.message : "The AI couldn't answer");
                     } finally {
                       setAiBusy(false);
                     }
                   }}
                 >
-                  {aiBusy ? <Spinner className="h-4 w-4" /> : <IconBolt width={16} height={16} />} Ask Claude what to eat
+                  {aiBusy ? <Spinner className="h-4 w-4" /> : <IconBolt width={16} height={16} />} Ask AI what to eat
                 </Button>
               )}
               {aiError && <p className="text-danger mt-2 text-sm">{aiError}</p>}

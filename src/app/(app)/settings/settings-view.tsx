@@ -27,6 +27,7 @@ import { fromUnit, formatEnergy, toUnit, unitLabel } from "@/lib/energy";
 import { PROTEIN_G_PER_KG } from "@/lib/tdee";
 import type { DayTargets, Profile } from "@/lib/types";
 import { saveProfile } from "@/server/actions/profile";
+import { aiAvailable } from "@/server/actions/ai";
 import { getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
 import { removePushSubscription, savePushSubscription } from "@/server/actions/push";
 
@@ -299,15 +300,23 @@ function TargetsSection() {
 }
 
 function AiSection({ profile, save }: { profile: Profile; save: SaveFn }) {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    aiAvailable().then(setAvailable, () => setAvailable(false));
+  }, []);
   return (
-    <Section title="AI features (Claude)" icon={IconSparkles}>
+    <Section title="AI features" icon={IconSparkles}>
       <Card className="p-4">
-        <Toggle
-          label="Claude suggestions, photo logging and label reading"
-          hint="Sends today's totals, targets, workouts, frequent foods and any photos you take to the Claude API."
-          checked={profile.ai_enabled}
-          onChange={(v) => save({ ai_enabled: v })}
-        />
+        {available === false ? (
+          <p className="text-muted text-sm">AI isn&apos;t set up on this server yet. It needs a free Gemini key (see the README).</p>
+        ) : (
+          <Toggle
+            label="AI suggestions, photo logging and label reading"
+            hint="Uses Google Gemini's free tier. Sends today's totals, targets, workouts, frequent foods and any photos you take to Google, which may use them to improve its products."
+            checked={profile.ai_enabled}
+            onChange={(v) => save({ ai_enabled: v })}
+          />
+        )}
       </Card>
     </Section>
   );

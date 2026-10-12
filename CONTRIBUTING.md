@@ -17,7 +17,7 @@ This is the guide for Jez, Levi and Owen.
 
    Your local app uses its own database in `.data/` and never touches the real one. Delete `.data/` and run `npm run seed:afcd` to start fresh.
 
-4. Optional: copy `.env.example` to `.env.local` and add a `USDA_API_KEY` (free) for wider food search, or an `ANTHROPIC_API_KEY` to try the AI features.
+4. Optional: copy `.env.example` to `.env.local` and add a `USDA_API_KEY` (free) for wider food search, or a free `GEMINI_API_KEY` to try the AI features.
 
 ## Making a change
 
