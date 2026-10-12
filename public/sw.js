@@ -4,7 +4,7 @@
  * - API and Supabase requests are never cached here; the app keeps its own
  *   per-user offline copy of today's log and recent foods in localStorage.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL = `shell-${VERSION}`;
 const STATIC = `static-${VERSION}`;
 const PRECACHE = ["/", "/log", "/offline", "/manifest.webmanifest", "/icons/icon-192.png"];
@@ -70,7 +70,7 @@ self.addEventListener("fetch", (event) => {
 
 // Web push reminders.
 self.addEventListener("push", (event) => {
-  let data = { title: "Fuel", body: "", url: "/" };
+  let data = { title: "kilo JOL", body: "", url: "/" };
   try {
     data = { ...data, ...event.data.json() };
   } catch {

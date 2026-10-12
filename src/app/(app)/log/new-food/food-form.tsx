@@ -3,17 +3,38 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import { IconChevronLeft } from "@/components/icons";
+import {
+  IconCamera,
+  IconCarbs,
+  IconChevronLeft,
+  IconEnergy,
+  IconFat,
+  IconFibre,
+  IconProtein,
+  IconUsers,
+  SLOT_ICONS,
+  type Icon,
+} from "@/components/icons";
 import { Button, Card, Input, PageHeader, cx } from "@/components/ui";
 import { deleteCustomFood, fetchFood, saveCustomFood, type CustomFoodInput } from "@/lib/data";
 import { fromUnit, toUnit, unitLabel } from "@/lib/energy";
 import { NUTRIENTS, PANEL_KEYS, round, type NutrientKey, type Nutrients } from "@/lib/nutrients";
+import { defaultSlot } from "@/lib/slots";
+import { MEAL_SLOTS, SLOT_LABELS, type MealSlot } from "@/lib/types";
+
+const ROW_ICONS: Partial<Record<NutrientKey, Icon>> = {
+  energy_kj: IconEnergy,
+  protein_g: IconProtein,
+  carbs_g: IconCarbs,
+  fat_g: IconFat,
+  fibre_g: IconFibre,
+};
 import { fileToDataUrl } from "@/lib/image";
 import { readNutritionPanel } from "@/server/actions/ai";
 
 type Basis = "100g" | "serve";
 
-/** Create or edit a private custom food, laid out like an Australian nutrition panel. */
+/** Create or edit a household food, laid out like an Australian nutrition panel. */
 export function FoodForm() {
   const params = useSearchParams();
   const router = useRouter();
@@ -42,6 +63,9 @@ export function FoodForm() {
     }
   }
   const editId = params.get("id");
+  const slotParam = params.get("slot") as MealSlot | null;
+  const slot: MealSlot = slotParam && MEAL_SLOTS.includes(slotParam) ? slotParam : defaultSlot();
+  const SlotIcon = SLOT_ICONS[slot];
 
   const [name, setName] = useState(params.get("name") ?? "");
   const [brand, setBrand] = useState("");
@@ -77,9 +101,16 @@ export function FoodForm() {
     for (const k of ["slot", "date"]) if (params.get(k)) q.set(k, params.get(k)!);
     return `/log?${q}`;
   };
+  const backTo = (extra: Record<string, string>) => {
+    const q = new URLSearchParams();
+    for (const k of ["slot", "date"]) if (params.get(k)) q.set(k, params.get(k)!);
+    for (const [k, v] of Object.entries(extra)) q.set(k, v);
+    return `/log?${q}`;
+  };
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const action = ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value ?? "log";
     setError(null);
     const serve = serveSize ? Number(serveSize) : null;
     if (basis === "serve" && !serve) return setError("Enter the serving size to use per-serve values.");
@@ -105,7 +136,7 @@ export function FoodForm() {
     setBusy(true);
     try {
       const food = await saveCustomFood(input, editId ?? undefined);
-      router.replace(`${back()}&food=custom:${food.id}`);
+      router.replace(action === "log" ? backTo({ food: `custom:${food.id}`, saved: "1" }) : backTo({ tab: "mine", savedOnly: food.name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
       setBusy(false);
@@ -116,7 +147,11 @@ export function FoodForm() {
     const d = NUTRIENTS.find((n) => n.key === key)!;
     return (
       <label key={key} className="flex items-center justify-between gap-3 px-4 py-2">
-        <span className={cx("text-sm", !d.macro && !PANEL_KEYS.includes(key) && "text-muted")}>
+        <span className={cx("flex items-center gap-2 text-sm", !d.macro && !PANEL_KEYS.includes(key) && "text-muted")}>
+          {(() => {
+            const I = ROW_ICONS[key];
+            return I ? <I width={15} height={15} className="text-muted" /> : <span className="w-[15px]" />;
+          })()}
           {d.label}
           <span className="text-muted"> ({key === "energy_kj" ? unitLabel(unit) : d.unit})</span>
         </span>
@@ -147,7 +182,8 @@ export function FoodForm() {
       <form onSubmit={submit} className="space-y-4 px-4">
         {profile.ai_enabled && (
           <label className="bg-accent-soft text-accent flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium">
-            {reading ? "Reading panel…" : "📷 Photograph the nutrition panel"}
+            <IconCamera width={20} height={20} />
+            {reading ? "Reading panel…" : "Photograph the nutrition panel"}
             <input
               type="file"
               accept="image/*"
@@ -161,6 +197,10 @@ export function FoodForm() {
             />
           </label>
         )}
+        <p className="bg-surface-2 text-muted flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm">
+          <IconUsers width={18} height={18} className="mt-0.5 shrink-0" />
+          <span>Foods you save here are shared with everyone in the household. Saving a food doesn&apos;t log it on its own.</span>
+        </p>
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
         <div className="grid grid-cols-2 gap-3">
           <Input label="Brand (optional)" value={brand} onChange={(e) => setBrand(e.target.value)} />
@@ -218,9 +258,21 @@ export function FoodForm() {
         <p className="text-muted text-xs">Leave anything not on the label blank — it&apos;s stored as &quot;no data&quot;, not zero.</p>
 
         {error && <p className="text-danger text-sm">{error}</p>}
-        <Button type="submit" size="lg" className="w-full" disabled={busy}>
-          {busy ? "Saving…" : "Save food"}
-        </Button>
+        {editId ? (
+          <Button type="submit" name="action" value="save" size="lg" className="w-full" disabled={busy}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        ) : (
+          <div className="space-y-2">
+            <Button type="submit" name="action" value="log" size="lg" className="w-full" disabled={busy}>
+              <SlotIcon width={20} height={20} />
+              {busy ? "Saving…" : `Save & add to ${SLOT_LABELS[slot]}`}
+            </Button>
+            <Button type="submit" name="action" value="save" variant="secondary" className="w-full" disabled={busy}>
+              Save to our foods only (don&apos;t log)
+            </Button>
+          </div>
+        )}
         {editId && (
           <Button
             type="button"

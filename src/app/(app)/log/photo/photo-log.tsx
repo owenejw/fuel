@@ -16,7 +16,7 @@ import { estimatePlate, type PlateEstimate } from "@/server/actions/ai";
 
 type Item = PlateEstimate["items"][number];
 
-/** Photo of a plate → Claude estimates items and grams → user edits → saved as entries. */
+/** Photo of a plate → AI estimates items and grams → user edits → saved as entries. */
 export function PhotoLog() {
   const router = useRouter();
   const params = useSearchParams();
@@ -104,7 +104,9 @@ export function PhotoLog() {
       />
       <div className="space-y-3 px-4">
         {!profile.ai_enabled && (
-          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on AI features in Settings to use photo logging.</p>
+          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">
+            Turn on &ldquo;Meal ideas &amp; photo logging&rdquo; in Settings to use this.
+          </p>
         )}
         <label className="border-border bg-surface block cursor-pointer overflow-hidden rounded-2xl border border-dashed text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -130,7 +132,7 @@ export function PhotoLog() {
         {photo && !items && (
           <>
             <Input
-              label="Anything Claude should know? (optional)"
+              label="Anything else to know? (optional)"
               placeholder="e.g. cooked in olive oil, large bowl"
               value={note}
               onChange={(e) => setNote(e.target.value)}

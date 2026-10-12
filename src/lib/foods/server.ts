@@ -6,7 +6,7 @@ import { rowToFood } from "./shared";
 import { UPSERT_REFERENCE_FOODS, wordMatch } from "./sql";
 import type { Food } from "../types";
 
-const OFF_USER_AGENT = process.env.OFF_USER_AGENT || "Fuel/0.1 (household nutrition app)";
+const OFF_USER_AGENT = process.env.OFF_USER_AGENT || "kiloJOL/0.1 (household nutrition app)";
 const USDA_KEY = process.env.USDA_API_KEY;
 const FETCH_TIMEOUT_MS = 6000;
 

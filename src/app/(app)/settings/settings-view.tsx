@@ -4,18 +4,37 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
 import { useToast } from "@/components/toast";
-import { Button, Card, Input, PageHeader } from "@/components/ui";
+import { Button, Card, Input, PageHeader, SectionTitle, Toggle } from "@/components/ui";
+import {
+  IconBell,
+  IconCalendarSync,
+  IconCarbs,
+  IconDownload,
+  IconDumbbell,
+  IconEnergy,
+  IconFat,
+  IconFibre,
+  IconPhone,
+  IconProtein,
+  IconRest,
+  IconSparkles,
+  IconTarget,
+  IconToday,
+  IconUsers,
+  type Icon,
+} from "@/components/icons";
 import { fromUnit, formatEnergy, toUnit, unitLabel } from "@/lib/energy";
 import { PROTEIN_G_PER_KG } from "@/lib/tdee";
 import type { DayTargets, Profile } from "@/lib/types";
 import { saveProfile } from "@/server/actions/profile";
+import { aiAvailable } from "@/server/actions/ai";
 import { getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
 import { removePushSubscription, savePushSubscription } from "@/server/actions/push";
 
-function Section({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
+function Section({ id, title, icon, children }: { id?: string; title: string; icon: Icon; children: React.ReactNode }) {
   return (
-    <section id={id}>
-      <h2 className="text-muted mb-2 text-sm font-semibold tracking-wide uppercase">{title}</h2>
+    <section id={id} className="scroll-mt-16">
+      <SectionTitle icon={icon}>{title}</SectionTitle>
       {children}
     </section>
   );
@@ -46,22 +65,22 @@ export function SettingsView() {
         <AiSection profile={profile} save={save} />
         <CalendarSection profile={profile} save={save} />
         <RemindersSection profile={profile} save={save} />
-        <Section title="Export">
+        <Section title="Export" icon={IconDownload}>
           <Card className="divide-border divide-y">
             {(["logs", "weights", "workouts"] as const).map((t) => (
-              <a key={t} href={`/api/export?type=${t}`} className="text-accent block px-4 py-3 text-sm">
-                Download {t} (CSV)
+              <a key={t} href={`/api/export?type=${t}`} className="text-accent flex items-center gap-2 px-4 py-3 text-sm">
+                <IconDownload width={16} height={16} /> Download {t} (CSV)
               </a>
             ))}
           </Card>
         </Section>
-        <Section title="Device">
+        <Section title="This device" icon={IconPhone}>
           <Card className="divide-border divide-y">
             <div className="px-4 py-3 text-sm">
               This device is using <span className="font-medium">{profile.name}</span>&apos;s profile.
             </div>
-            <button onClick={switchProfile} className="text-accent block w-full px-4 py-3 text-left text-sm">
-              Switch profile
+            <button onClick={switchProfile} className="text-accent flex w-full items-center gap-2 px-4 py-3 text-left text-sm">
+              <IconUsers width={16} height={16} /> Switch profile
             </button>
           </Card>
         </Section>
@@ -77,7 +96,7 @@ function ProfileSection({ profile, save }: { profile: Profile; save: SaveFn }) {
   const [draft, setDraft] = useState<ProfileDraft>({ ...profile });
   const [busy, setBusy] = useState(false);
   return (
-    <Section title="Profile">
+    <Section title="Profile" icon={IconToday}>
       <Card className="p-4">
         <form
           className="space-y-4"
@@ -102,12 +121,12 @@ function ProfileSection({ profile, save }: { profile: Profile; save: SaveFn }) {
   );
 }
 
-const FIELDS: { key: keyof DayTargets; label: string }[] = [
-  { key: "energy_kj", label: "" },
-  { key: "protein_g", label: "Protein g" },
-  { key: "carbs_g", label: "Carbs g" },
-  { key: "fat_g", label: "Fat g" },
-  { key: "fibre_g", label: "Fibre g" },
+const FIELDS: { key: keyof DayTargets; label: string; icon: Icon }[] = [
+  { key: "energy_kj", label: "Energy", icon: IconEnergy },
+  { key: "protein_g", label: "Protein", icon: IconProtein },
+  { key: "carbs_g", label: "Carbs", icon: IconCarbs },
+  { key: "fat_g", label: "Fat", icon: IconFat },
+  { key: "fibre_g", label: "Fibre", icon: IconFibre },
 ];
 
 function TargetsSection() {
@@ -182,26 +201,21 @@ function TargetsSection() {
     }
   }
 
-  const row = (p: "training" | "rest") => (
-    <div className="grid grid-cols-5 gap-2">
-      {FIELDS.map(({ key, label }) => (
-        <Input
-          key={key}
-          label={label || unitLabel(unit)}
-          type="number"
-          inputMode="decimal"
-          min={0}
-          value={form[`${p}.${key}`] ?? ""}
-          onChange={(e) => setForm((f) => ({ ...f, [`${p}.${key}`]: e.target.value }))}
-          className="[&_input]:px-2 [&_span]:text-xs"
-          required
-        />
-      ))}
-    </div>
+  const cell = (p: "training" | "rest", key: keyof DayTargets, label: string) => (
+    <input
+      aria-label={`${p === "training" ? "Training" : "Rest"} day ${label}`}
+      type="number"
+      inputMode="decimal"
+      min={0}
+      value={form[`${p}.${key}`] ?? ""}
+      onChange={(e) => setForm((f) => ({ ...f, [`${p}.${key}`]: e.target.value }))}
+      className="tabular border-border bg-surface focus:border-accent h-10 w-full min-w-0 rounded-lg border px-2 text-right outline-none"
+      required
+    />
   );
 
   return (
-    <Section id="targets" title="Daily targets">
+    <Section id="targets" title="Daily targets" icon={IconTarget}>
       <Card className="space-y-4 p-4">
         {!ctx ? null : (
           <>
@@ -251,13 +265,25 @@ function TargetsSection() {
             )}
 
             <form onSubmit={submit} className="space-y-4">
-              <div>
-                <div className="mb-1 text-sm font-medium">Training days</div>
-                {row("training")}
-              </div>
-              <div>
-                <div className="mb-1 text-sm font-medium">Rest days</div>
-                {row("rest")}
+              <div className="grid grid-cols-[1fr_6rem_6rem] items-center gap-x-2 gap-y-2">
+                <span />
+                <span className="text-muted flex items-center justify-end gap-1 text-xs font-medium">
+                  <IconDumbbell width={13} height={13} /> Training
+                </span>
+                <span className="text-muted flex items-center justify-end gap-1 text-xs font-medium">
+                  <IconRest width={13} height={13} /> Rest
+                </span>
+                {FIELDS.map(({ key, label, icon: I }) => (
+                  <div key={key} className="contents">
+                    <span className="flex items-center gap-2 text-sm">
+                      <I width={15} height={15} className="text-muted" />
+                      {label}
+                      <span className="text-muted text-xs">{key === "energy_kj" ? unitLabel(unit) : "g"}</span>
+                    </span>
+                    {cell("training", key, label)}
+                    {cell("rest", key, label)}
+                  </div>
+                ))}
               </div>
               <p className="text-muted text-xs">
                 Protein stays constant; training days get more carbs, rest days fewer, so the weekly average matches your goal.
@@ -274,23 +300,23 @@ function TargetsSection() {
 }
 
 function AiSection({ profile, save }: { profile: Profile; save: SaveFn }) {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    aiAvailable().then(setAvailable, () => setAvailable(false));
+  }, []);
   return (
-    <Section title="AI features (Claude)">
+    <Section title="Meal ideas & photo logging" icon={IconSparkles}>
       <Card className="p-4">
-        <label className="flex items-center justify-between gap-3">
-          <span className="text-sm">
-            Claude suggestions, photo-of-plate logging and nutrition-panel reading
-            <span className="text-muted block text-xs">
-              Sends today&apos;s totals, targets, workouts, frequent foods and any photos you take to the Claude API.
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            className="h-6 w-6 accent-[var(--accent)]"
+        {available === false ? (
+          <p className="text-muted text-sm">This isn&apos;t set up on the server yet. It needs a free Gemini key (see the README).</p>
+        ) : (
+          <Toggle
+            label="Meal ideas, photo logging and label reading"
+            hint="Sends today's totals, targets, workouts, frequent foods and any photos you take to Google to work these out. Google may use them to improve its products."
             checked={profile.ai_enabled}
-            onChange={(e) => save({ ai_enabled: e.target.checked })}
+            onChange={(v) => save({ ai_enabled: v })}
           />
-        </label>
+        )}
       </Card>
     </Section>
   );
@@ -302,7 +328,7 @@ function CalendarSection({ profile, save }: { profile: Profile; save: SaveFn }) 
   const [keywords, setKeywords] = useState(profile.calendar_keywords);
   const [busy, setBusy] = useState(false);
   return (
-    <Section title="Google Calendar">
+    <Section title="Google Calendar" icon={IconCalendarSync}>
       <Card className="space-y-3 p-4">
         <p className="text-muted text-xs">
           In Google Calendar on a computer: Settings → your calendar → Integrate calendar → copy the{" "}
@@ -380,7 +406,7 @@ function RemindersSection({ profile, save }: { profile: Profile; save: SaveFn })
       setSubscribed(true);
       toast("Reminders enabled on this device");
     } catch {
-      toast("Couldn't enable notifications. On iPhone, add Fuel to your Home Screen first.");
+      toast("Couldn't enable notifications. On iPhone, add kilo JOL to your Home Screen first.");
     }
   }
 
@@ -395,13 +421,13 @@ function RemindersSection({ profile, save }: { profile: Profile; save: SaveFn })
   }
 
   return (
-    <Section title="Reminders">
+    <Section title="Reminders" icon={IconBell}>
       <Card className="space-y-3 p-4">
         {!vapid ? (
           <p className="text-muted text-sm">Push reminders need VAPID keys configured on the server (see README).</p>
         ) : subscribed === null ? (
           <p className="text-muted text-sm">
-            Notifications aren&apos;t available here. On iPhone, install Fuel to the Home Screen and open it from there.
+            Notifications aren&apos;t available here. On iPhone, install kilo JOL to the Home Screen and open it from there.
           </p>
         ) : (
           <Button variant={subscribed ? "secondary" : "primary"} className="w-full" onClick={subscribed ? disable : enable}>
@@ -419,15 +445,12 @@ function RemindersSection({ profile, save }: { profile: Profile; save: SaveFn })
             Save
           </Button>
         </div>
-        <label className="flex items-center justify-between gap-3 text-sm">
-          Pre-workout fuelling reminders (~2.5 h before)
-          <input
-            type="checkbox"
-            className="h-6 w-6 accent-[var(--accent)]"
-            checked={profile.remind_workouts}
-            onChange={(e) => save({ remind_workouts: e.target.checked })}
-          />
-        </label>
+        <Toggle
+          label="Pre-workout fuelling reminders"
+          hint="About 2½ hours before a session"
+          checked={profile.remind_workouts}
+          onChange={(v) => save({ remind_workouts: v })}
+        />
       </Card>
     </Section>
   );

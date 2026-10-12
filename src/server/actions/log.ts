@@ -36,6 +36,19 @@ export async function fetchLogRange(from: string, to: string): Promise<LogEntry[
   return getLog(await requireProfileId(), date.parse(from), date.parse(to));
 }
 
+/** Dates (YYYY-MM-DD) with at least one log entry, newest first, for streaks. */
+export async function fetchLoggedDays(end: string, days = 120): Promise<string[]> {
+  const pid = await requireProfileId();
+  const to = date.parse(end);
+  const rows = await (
+    await db()
+  ).query<{ d: string }>(
+    `select distinct to_char(date, 'YYYY-MM-DD') as d from log_entries where profile_id = $1 and date between $2 and $3 order by d desc`,
+    [pid, addDays(to, -days), to],
+  );
+  return rows.map((r) => r.d);
+}
+
 export async function addEntries(entries: NewEntry[]): Promise<LogEntry[]> {
   const pid = await requireProfileId();
   const parsed = z.array(Entry).max(100).parse(entries);

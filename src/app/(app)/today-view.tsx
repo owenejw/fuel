@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FoodSheet } from "@/components/food-sheet";
 import { FuellingCard } from "@/components/fuelling-card";
 import { SuggestionsCard } from "@/components/suggestions-card";
@@ -12,13 +12,30 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { EntrySheet } from "@/components/entry-sheet";
-import { IconBolt, IconChevronLeft, IconChevronRight } from "@/components/icons";
+import {
+  IconBolt,
+  IconBookmark,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClose,
+  IconCopy,
+  IconDumbbell,
+  IconIdea,
+  IconRest,
+  IconSparkles,
+  IconStreak,
+  IconTrash,
+  type Icon,
+} from "@/components/icons";
 import { MealSlotCard } from "@/components/meal-slot";
 import { DaySummary, MacroLine } from "@/components/nutrition";
 import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { useToast } from "@/components/toast";
-import { Button, Card, Input, PageHeader, Sheet, Spinner } from "@/components/ui";
-import { copyEntries, entryToNew, fetchRecentMeals, saveMeal } from "@/lib/data";
+import { Button, Card, ChoiceCards, Input, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
+import { copyEntries, entryToNew, fetchLoggedDays, fetchRecentMeals, saveMeal } from "@/lib/data";
+import { greeting } from "@/lib/greeting";
+import { computeStreak, type Streak } from "@/lib/streak";
 import { addDays, friendlyDate, isValidDate, today } from "@/lib/dates";
 import { useDay } from "@/lib/hooks";
 import { sumNutrients, combineTotals } from "@/lib/nutrients";
@@ -43,6 +60,13 @@ export function TodayView() {
   const [editing, setEditing] = useState<LogEntry | null>(null);
   const [quick, setQuick] = useState<{ slot: MealSlot; entry?: LogEntry } | null>(null);
   const [menuSlot, setMenuSlot] = useState<MealSlot | null>(null);
+  const [dayTypeOpen, setDayTypeOpen] = useState(false);
+  const [loggedDays, setLoggedDays] = useState<string[] | null>(null);
+  const entryCount = entries?.length ?? 0;
+  useEffect(() => {
+    fetchLoggedDays(today()).then(setLoggedDays, () => undefined);
+  }, [entryCount]);
+  const streak = useMemo(() => (loggedDays ? computeStreak(loggedDays, today()) : null), [loggedDays]);
 
   const bySlot = useMemo(() => {
     const m = new Map<MealSlot, LogEntry[]>(MEAL_SLOTS.map((s) => [s, []]));
@@ -64,6 +88,13 @@ export function TodayView() {
     });
   }
 
+  const undoAction = (added: LogEntry[]) => ({
+    label: "Undo",
+    onClick: () => {
+      remove(added.map((x) => x.id)).catch(() => toast("Could not undo"));
+    },
+  });
+
   async function copyFromYesterday(slot?: MealSlot) {
     try {
       const copied = await copyEntries(addDays(date, -1), date, slot ? { fromSlot: slot } : {});
@@ -83,7 +114,7 @@ export function TodayView() {
           </button>
         }
         title={
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 text-base">
             {friendlyDate(date)}
             <button onClick={() => go(addDays(date, 1))} className="rounded-full p-2" aria-label="Next day">
               <IconChevronRight />
@@ -93,41 +124,50 @@ export function TodayView() {
         right={
           <button
             onClick={() => setQuick({ slot: defaultSlot() })}
-            className="bg-surface-2 flex items-center gap-1 rounded-full px-3 py-1.5 text-sm"
+            className="bg-surface-2 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium"
           >
-            <IconBolt width={16} height={16} /> Quick add
+            <IconBolt width={16} height={16} className="text-accent" /> Quick add
           </button>
         }
       />
 
       <div className="space-y-3 px-4">
+        {isToday && <Greeting name={profile.name} seed={profile.id} streak={streak} />}
         {offline && <p className="bg-surface-2 text-muted rounded-xl px-3 py-2 text-sm">Offline — showing your saved copy.</p>}
         {day ? (
           <>
-            <DaySummary totals={dayTotals} targets={day.plan.targets} unit={unit} training={day.plan.training} />
-            <DayTypeToggle
-              value={day.plan.dayTypeOverridden ? day.plan.dayType : null}
-              auto={day.plan.workouts.some((w) => w.type !== "rest") ? "training" : "rest"}
-              onChange={async (t) => {
-                await setDayType(date, t);
-                await refresh();
-              }}
+            <DaySummary
+              totals={dayTotals}
+              targets={day.plan.targets}
+              unit={unit}
+              badge={
+                <button
+                  onClick={() => setDayTypeOpen(true)}
+                  className={cx(
+                    "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                    day.plan.training ? "bg-accent-soft text-accent" : "bg-surface-2 text-text",
+                  )}
+                  aria-label="Change day type"
+                >
+                  {day.plan.training ? <IconDumbbell width={14} height={14} /> : <IconRest width={14} height={14} />}
+                  {day.plan.training ? "Training day" : "Rest day"}
+                  <IconChevronDown width={14} height={14} />
+                </button>
+              }
             />
-            {day.plan.carbLoadingFor && (
-              <p className="bg-accent-soft text-accent rounded-xl px-3 py-2 text-sm">
+            {day.plan.carbLoadingFor ? (
+              <Tip icon={IconSparkles} tone="accent">
                 Carb loading for {day.plan.carbLoadingFor}: carbs raised to {day.plan.targets.carbs_g} g today.
-              </p>
-            )}
-            {day.plan.source === "placeholder" && (
-              <Link href="/onboarding" className="bg-accent-soft text-accent block rounded-xl px-3 py-2 text-sm">
-                Using placeholder targets — add your height, birth date and weight to get personal ones.
-              </Link>
-            )}
-            {day.plan.source === "estimated" && (
-              <Link href="/settings#targets" className="bg-surface-2 text-muted block rounded-xl px-3 py-2 text-sm">
-                Targets estimated from your profile. Review or save them in Settings.
-              </Link>
-            )}
+              </Tip>
+            ) : day.plan.source === "placeholder" ? (
+              <Tip icon={IconIdea} tone="accent" href="/onboarding">
+                These are placeholder targets. Add your height, birth date and weight to get your own →
+              </Tip>
+            ) : day.plan.source === "estimated" ? (
+              <Tip icon={IconIdea} href="/settings#targets" dismissKey="estimated-targets">
+                Targets are estimated from your profile. Tap to review them in Settings.
+              </Tip>
+            ) : null}
             <FuellingCard items={day.fuelling} workouts={day.plan.workouts} nowMin={nowMin} isToday={isToday} />
           </>
         ) : null}
@@ -141,8 +181,8 @@ export function TodayView() {
             {entries!.length === 0 && (
               <Card className="flex items-center justify-between gap-3 p-4">
                 <span className="text-muted text-sm">Nothing logged {date === today() ? "yet today" : "this day"}.</span>
-                <Button size="sm" variant="secondary" onClick={() => copyFromYesterday()}>
-                  Copy previous day
+                <Button size="sm" variant="secondary" className="shrink-0 whitespace-nowrap" onClick={() => copyFromYesterday()}>
+                  <IconCopy width={16} height={16} /> Copy yesterday
                 </Button>
               </Card>
             )}
@@ -155,6 +195,7 @@ export function TodayView() {
                 totals={slotTotals.get(slot)!}
                 unit={unit}
                 onEntry={(e) => (e.kind === "quick" ? setQuick({ slot: e.slot, entry: e }) : setEditing(e))}
+                onDelete={(e) => handleDelete([e.id])}
                 onMenu={() => setMenuSlot(slot)}
               />
             ))}
@@ -175,9 +216,9 @@ export function TodayView() {
                 version={version}
                 onOpenFood={setOpenFood}
                 onAdd={async (items, label) => {
-                  await add(items);
+                  const added = await add(items);
                   setVersion((v) => v + 1);
-                  toast(`Added ${label}`);
+                  toast(`Added ${label} to ${SLOT_LABELS[items[0].slot]}`, undoAction(added));
                 }}
               />
             )}
@@ -192,10 +233,10 @@ export function TodayView() {
         slot={defaultSlot()}
         unit={unit}
         onAdd={async (e) => {
-          await add([e]);
+          const added = await add([e]);
           setOpenFood(null);
           setVersion((v) => v + 1);
-          toast(`Added to ${SLOT_LABELS[e.slot]}`);
+          toast(`Added ${e.name} to ${SLOT_LABELS[e.slot]} · ${friendlyDate(e.date)}`, undoAction(added));
         }}
       />
 
@@ -220,12 +261,26 @@ export function TodayView() {
           if (quick?.entry) {
             await update(quick.entry.id, { name: e.name, slot: e.slot, nutrients: e.nutrients });
           } else {
-            await add([e]);
-            toast(`Added to ${SLOT_LABELS[e.slot]}`);
+            const added = await add([e]);
+            toast(`Added ${e.name} to ${SLOT_LABELS[e.slot]} · ${friendlyDate(e.date)}`, undoAction(added));
           }
           setQuick(null);
         }}
       />
+
+      <Sheet open={dayTypeOpen} onClose={() => setDayTypeOpen(false)} title="What kind of day is it?">
+        {day && (
+          <DayTypePicker
+            value={day.plan.dayTypeOverridden ? day.plan.dayType : null}
+            auto={day.plan.workouts.some((w) => w.type !== "rest") ? "training" : "rest"}
+            onChange={async (t) => {
+              setDayTypeOpen(false);
+              await setDayType(date, t);
+              await refresh();
+            }}
+          />
+        )}
+      </Sheet>
 
       <SlotMenu
         slot={menuSlot}
@@ -298,9 +353,14 @@ function SlotMenu({
     <Sheet open onClose={close} title={SLOT_LABELS[slot]}>
       {view === "menu" && (
         <div className="divide-border border-border divide-y overflow-hidden rounded-xl border">
-          <MenuItem onClick={() => onQuickAdd(slot)}>Quick add</MenuItem>
-          <MenuItem onClick={() => onCopyYesterday(slot)}>Copy {SLOT_LABELS[slot].toLowerCase()} from yesterday</MenuItem>
+          <MenuItem icon={IconBolt} onClick={() => onQuickAdd(slot)}>
+            Quick add kJ
+          </MenuItem>
+          <MenuItem icon={IconCopy} onClick={() => onCopyYesterday(slot)}>
+            Copy {SLOT_LABELS[slot].toLowerCase()} from yesterday
+          </MenuItem>
           <MenuItem
+            icon={IconCopy}
             onClick={() => {
               setView("previous");
               fetchRecentMeals(date, slot).then(setPrevious, () => setPrevious([]));
@@ -311,6 +371,7 @@ function SlotMenu({
           {entries.length > 0 && (
             <>
               <MenuItem
+                icon={IconBookmark}
                 onClick={() => {
                   setMealName(SLOT_LABELS[slot]);
                   setView("save");
@@ -318,7 +379,7 @@ function SlotMenu({
               >
                 Save as a meal…
               </MenuItem>
-              <MenuItem className="text-danger" onClick={() => onClear(entries.map((e) => e.id))}>
+              <MenuItem icon={IconTrash} className="text-danger" onClick={() => onClear(entries.map((e) => e.id))}>
                 Clear {SLOT_LABELS[slot].toLowerCase()}
               </MenuItem>
             </>
@@ -380,15 +441,26 @@ function SlotMenu({
   );
 }
 
-function MenuItem({ children, onClick, className }: { children: React.ReactNode; onClick: () => void; className?: string }) {
+function MenuItem({
+  children,
+  onClick,
+  className,
+  icon: ItemIcon,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  className?: string;
+  icon: Icon;
+}) {
   return (
-    <button onClick={onClick} className={`active:bg-surface-2 block w-full px-4 py-3.5 text-left ${className ?? ""}`}>
+    <button onClick={onClick} className={cx("active:bg-surface-2 flex w-full items-center gap-3 px-4 py-3.5 text-left", className)}>
+      <ItemIcon width={18} height={18} className="shrink-0 opacity-70" />
       {children}
     </button>
   );
 }
 
-function DayTypeToggle({
+function DayTypePicker({
   value,
   auto,
   onChange,
@@ -397,24 +469,121 @@ function DayTypeToggle({
   auto: "training" | "rest";
   onChange: (t: "training" | "rest" | null) => void;
 }) {
-  const opts: { v: "training" | "rest" | null; label: string }[] = [
-    { v: null, label: `Auto (${auto})` },
-    { v: "training", label: "Training" },
-    { v: "rest", label: "Rest" },
-  ];
+  type V = "auto" | "training" | "rest";
   return (
-    <div className="bg-surface-2 flex rounded-xl p-1 text-xs" role="radiogroup" aria-label="Day type">
-      {opts.map((o) => (
+    <div className="space-y-3">
+      <ChoiceCards<V>
+        value={value ?? "auto"}
+        onChange={(v) => onChange(v === "auto" ? null : v)}
+        options={[
+          {
+            value: "auto",
+            label: `Automatic (${auto} day)`,
+            hint: "Worked out from the workouts in your Plan",
+            icon: IconSparkles,
+          },
+          { value: "training", label: "Training day", hint: "More carbs to fuel your session", icon: IconDumbbell },
+          { value: "rest", label: "Rest day", hint: "Fewer carbs, same protein", icon: IconRest },
+        ]}
+      />
+    </div>
+  );
+}
+
+function Greeting({ name, seed, streak }: { name: string; seed: string; streak: Streak | null }) {
+  const [now] = useState(() => new Date());
+  return (
+    <div className="pt-1 pb-1">
+      <h2 className="text-2xl font-semibold tracking-tight">{greeting(name, today(), now.getHours(), seed)}</h2>
+      <div className="text-muted mt-1 flex items-center gap-3 text-sm">
+        <span>{now.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long" })}</span>
+        {streak && streak.days > 0 && (
+          <span className="text-carbs flex items-center gap-1 font-medium">
+            <IconStreak width={15} height={15} />
+            {streak.days}-day streak
+          </span>
+        )}
+      </div>
+      {streak && (
+        <div className="mt-2 flex gap-1.5" aria-label={`Logged ${streak.week.filter((d) => d.logged).length} of 7 days this week`}>
+          {streak.week.map((d) => (
+            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+              <span
+                className={cx(
+                  "h-1.5 w-full rounded-full",
+                  d.logged ? "bg-accent" : d.future ? "bg-surface-2" : "bg-border",
+                  d.date === today() && !d.logged && "ring-accent ring-1",
+                )}
+              />
+              <span className={cx("text-[10px]", d.date === today() ? "text-text font-semibold" : "text-muted")}>
+                {"MTWTFSS"[(new Date(d.date + "T00:00").getDay() + 6) % 7]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function readDismissed(key: string) {
+  try {
+    return localStorage.getItem(`kj:tip:${key}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** One quiet, optionally dismissible note. */
+function Tip({
+  icon: TipIcon,
+  children,
+  href,
+  tone = "muted",
+  dismissKey,
+}: {
+  icon: Icon;
+  children: React.ReactNode;
+  href?: string;
+  tone?: "muted" | "accent";
+  dismissKey?: string;
+}) {
+  const [hidden, setHidden] = useState(() => (dismissKey ? readDismissed(dismissKey) : false));
+  if (hidden) return null;
+  const body = (
+    <>
+      <TipIcon width={18} height={18} className="mt-0.5 shrink-0" />
+      <span className="flex-1">{children}</span>
+    </>
+  );
+  return (
+    <div
+      className={cx(
+        "flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm",
+        tone === "accent" ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted",
+      )}
+    >
+      {href ? (
+        <Link href={href} className="flex flex-1 items-start gap-2">
+          {body}
+        </Link>
+      ) : (
+        body
+      )}
+      {dismissKey && (
         <button
-          key={String(o.v)}
-          role="radio"
-          aria-checked={value === o.v}
-          onClick={() => onChange(o.v)}
-          className={`h-8 flex-1 rounded-lg ${value === o.v ? "bg-surface font-medium shadow-sm" : "text-muted"}`}
+          className="-m-1 rounded-full p-1"
+          aria-label="Dismiss"
+          onClick={() => {
+            try {
+              localStorage.setItem(`kj:tip:${dismissKey}`, "1");
+            } catch {}
+            setHidden(true);
+          }}
         >
-          {o.label}
+          <IconClose width={16} height={16} />
         </button>
-      ))}
+      )}
     </div>
   );
 }

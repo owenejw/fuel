@@ -93,6 +93,7 @@ export function RecipeBuilder() {
       const back = new URLSearchParams();
       for (const k of ["slot", "date"]) if (params.get(k)) back.set(k, params.get(k)!);
       back.set("food", `recipe:${food.id}`);
+      back.set("saved", "1");
       router.replace(`/log?${back}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");

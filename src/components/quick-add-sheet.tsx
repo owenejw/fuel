@@ -4,8 +4,11 @@ import { useState } from "react";
 import type { NewEntry } from "@/lib/data";
 import { fromUnit, toUnit, unitLabel, type EnergyUnit } from "@/lib/energy";
 import type { Nutrients } from "@/lib/nutrients";
-import { MEAL_SLOTS, SLOT_LABELS, type LogEntry, type MealSlot } from "@/lib/types";
-import { Button, Input, Select, Sheet } from "./ui";
+import { SLOT_LABELS, type LogEntry, type MealSlot } from "@/lib/types";
+import { friendlyDate } from "@/lib/dates";
+import { IconCarbs, IconEnergy, IconFat, IconProtein } from "./icons";
+import { SlotChips } from "./slot-chips";
+import { Button, Input, Sheet } from "./ui";
 
 const num = (s: string) => (s.trim() === "" ? null : Number(s));
 
@@ -85,50 +88,63 @@ function QuickAddForm({
 
   return (
     <form onSubmit={save} className="space-y-3">
-      <Input label="Description (optional)" value={name} onChange={(e) => setName(e.target.value)} placeholder="Quick add" />
       <Input
-        label={`Energy (${unitLabel(unit)})`}
-        type="number"
-        inputMode="decimal"
-        min={0}
-        value={energy}
-        onChange={(e) => setEnergy(e.target.value)}
-        required
-        autoFocus
+        label="What was it? (optional)"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="e.g. Coffee and a muffin"
       />
+      <label className="border-border bg-surface focus-within:border-accent flex h-16 items-center gap-3 rounded-2xl border px-4">
+        <IconEnergy width={22} height={22} className="text-accent shrink-0" />
+        <input
+          aria-label={`Energy (${unitLabel(unit)})`}
+          type="number"
+          inputMode="decimal"
+          min={0}
+          value={energy}
+          onChange={(e) => setEnergy(e.target.value)}
+          required
+          autoFocus
+          placeholder="0"
+          className="tabular min-w-0 flex-1 bg-transparent text-2xl font-semibold outline-none"
+        />
+        <span className="text-muted">{unitLabel(unit)}</span>
+      </label>
       <div className="grid grid-cols-3 gap-2">
-        <Input
-          label="Protein g"
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="any"
-          value={protein}
-          onChange={(e) => setProtein(e.target.value)}
-        />
-        <Input
-          label="Carbs g"
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="any"
-          value={carbs}
-          onChange={(e) => setCarbs(e.target.value)}
-        />
-        <Input label="Fat g" type="number" inputMode="decimal" min={0} step="any" value={fat} onChange={(e) => setFat(e.target.value)} />
+        {(
+          [
+            ["Protein", protein, setProtein, IconProtein, "var(--protein)"],
+            ["Carbs", carbs, setCarbs, IconCarbs, "var(--carbs)"],
+            ["Fat", fat, setFat, IconFat, "var(--fat)"],
+          ] as const
+        ).map(([label, v, setV, I, color]) => (
+          <label key={label} className="border-border bg-surface focus-within:border-accent block rounded-xl border px-3 py-2">
+            <span className="text-muted flex items-center gap-1 text-xs">
+              <I width={13} height={13} style={{ color }} /> {label}
+            </span>
+            <span className="flex items-baseline gap-1">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                value={v}
+                placeholder="–"
+                onChange={(e) => setV(e.target.value)}
+                className="tabular w-full min-w-0 bg-transparent text-lg outline-none"
+              />
+              <span className="text-muted text-sm">g</span>
+            </span>
+          </label>
+        ))}
       </div>
       <p className="text-muted text-xs">
         Leave a macro blank if you don&apos;t know it — it&apos;ll show as &quot;no data&quot;, not zero.
       </p>
-      <Select
-        label="Meal"
-        value={slot}
-        onChange={(v) => setSlot(v as MealSlot)}
-        options={MEAL_SLOTS.map((s) => ({ value: s, label: SLOT_LABELS[s] }))}
-      />
+      <SlotChips label="Meal" value={slot} onChange={setSlot} />
       {error && <p className="text-danger text-sm">{error}</p>}
       <Button type="submit" className="w-full" disabled={busy}>
-        {busy ? "Saving…" : entry ? "Save" : "Add"}
+        {busy ? "Saving…" : entry ? "Save" : `Add to ${SLOT_LABELS[slot]} · ${friendlyDate(date)}`}
       </Button>
     </form>
   );

@@ -5,13 +5,32 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { FoodSheet } from "@/components/food-sheet";
-import { IconBarcode, IconChevronLeft, IconPlus, IconSearch, IconTrash } from "@/components/icons";
+import {
+  IconBarcode,
+  IconBolt,
+  IconBook,
+  IconCamera,
+  IconCheck,
+  IconChef,
+  IconChevronDown,
+  IconChevronLeft,
+  IconClock,
+  IconEdit,
+  IconMeal,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+  SLOT_ICONS,
+  type Icon,
+} from "@/components/icons";
+import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { MacroLine } from "@/components/nutrition";
 import { Scanner } from "@/components/scanner";
 import { useToast } from "@/components/toast";
 import { Button, Card, Empty, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
 import {
   addEntries,
+  deleteEntries,
   deleteSavedMeal,
   fetchCustomFoods,
   fetchFood,
@@ -31,6 +50,28 @@ import { defaultSlot } from "@/lib/slots";
 import { MEAL_SLOTS, SLOT_LABELS, type Food, type MealSlot, type Recipe, type SavedMeal } from "@/lib/types";
 
 type Tab = "frequent" | "mine" | "recipes" | "meals";
+type Filter = "all" | "household" | "afcd" | "branded";
+
+const TABS: [Tab, string, Icon][] = [
+  ["frequent", "Recent", IconClock],
+  ["mine", "Our foods", IconBook],
+  ["recipes", "Recipes", IconChef],
+  ["meals", "Meals", IconMeal],
+];
+
+const FILTERS: [Filter, string][] = [
+  ["all", "All"],
+  ["household", "Our foods"],
+  ["afcd", "Australian"],
+  ["branded", "Branded"],
+];
+
+function matchesFilter(f: Food, filter: Filter) {
+  if (filter === "household") return f.kind === "custom" || f.kind === "recipe";
+  if (filter === "afcd") return f.source === "afcd";
+  if (filter === "branded") return !!f.brand || f.source === "off" || f.source === "usda";
+  return true;
+}
 
 function frequentToFood(f: FrequentFood): Food {
   return {
@@ -59,7 +100,10 @@ export function LogView() {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<{ q: string; foods: Food[] } | null>(null);
   const [selected, setSelected] = useState<{ food: Food; grams?: number | null } | null>(null);
-  const [tab, setTab] = useState<Tab>("frequent");
+  const [tab, setTab] = useState<Tab>(params.get("tab") === "mine" ? "mine" : "frequent");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [quickOpen, setQuickOpen] = useState(false);
+  const justSaved = params.get("saved") === "1";
   const [scanning, setScanning] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [missingBarcode, setMissingBarcode] = useState<string | null>(null);
@@ -72,7 +116,8 @@ export function LogView() {
 
   // Debounced search across custom foods, the reference cache and USDA.
   const q = query.trim();
-  const results = q.length >= 2 && found ? found.foods : null;
+  const allResults = q.length >= 2 && found ? found.foods : null;
+  const results = allResults && allResults.filter((f) => matchesFilter(f, filter));
   const searching = q.length >= 2 && found?.q !== q;
   useEffect(() => {
     if (q.length < 2) return;
@@ -100,6 +145,12 @@ export function LogView() {
     if (tab === "meals" && meals === null) fetchSavedMeals().then(setMeals, () => setMeals([]));
   }, [tab, customFoods, meals, recipes]);
 
+  // Confirm a food that was saved without logging it.
+  const savedOnly = params.get("savedOnly");
+  useEffect(() => {
+    if (savedOnly) toast(`Saved ${savedOnly} to our foods (not logged)`);
+  }, [savedOnly, toast]);
+
   // Open a food passed in the URL (e.g. after creating a custom food).
   const foodParam = params.get("food");
   useEffect(() => {
@@ -110,13 +161,26 @@ export function LogView() {
     }
   }, [foodParam]);
 
+  /** Log entries and confirm exactly where they went, with Undo. */
   const logEntries = useCallback(
-    async (items: NewEntry[], message: string) => {
-      await addEntries(items);
-      toast(message, { label: "View", onClick: () => router.push(date === today() ? "/" : `/?date=${date}`) });
+    async (items: NewEntry[], what: string) => {
+      const added = await addEntries(items);
+      const where = `${SLOT_LABELS[items[0].slot]} · ${friendlyDate(items[0].date)}`;
+      toast(`Added ${what} to ${where}`, {
+        label: "Undo",
+        onClick: () => {
+          deleteEntries(added.map((e) => e.id)).then(
+            () => {
+              toast("Removed");
+              refreshFrequent();
+            },
+            () => toast("Could not undo"),
+          );
+        },
+      });
       refreshFrequent();
     },
-    [toast, router, date, refreshFrequent],
+    [toast, refreshFrequent],
   );
 
   const onDetected = useCallback(
@@ -133,9 +197,10 @@ export function LogView() {
         setLookingUp(false);
       }
     },
-    [toast],
+    [toast, setScanning, setLookingUp, setSelected, setMissingBarcode],
   );
 
+  const SlotIcon = SLOT_ICONS[slot];
   const newFoodHref = (barcode?: string) =>
     `/log/new-food?slot=${slot}&date=${date}${barcode ? `&barcode=${barcode}` : ""}${query && !barcode ? `&name=${encodeURIComponent(query)}` : ""}`;
 
@@ -149,28 +214,39 @@ export function LogView() {
             </button>
           ) : undefined
         }
-        title="Add food"
-        right={
-          <button onClick={() => setSlotPicker(true)} className="bg-surface-2 rounded-full px-3 py-1.5 text-sm">
-            {SLOT_LABELS[slot]}
-            {date !== today() && ` · ${friendlyDate(date)}`} ▾
-          </button>
-        }
+        title="Log food"
       />
 
       <div className="space-y-3 px-4">
-        <div className="flex gap-2">
-          <Button size="lg" className="flex-1" onClick={() => setScanning(true)} disabled={lookingUp}>
-            {lookingUp ? <Spinner /> : <IconBarcode />} {lookingUp ? "Looking up…" : "Scan barcode"}
-          </Button>
-          {profile.ai_enabled && (
-            <Link
-              href={`/log/photo?slot=${slot}&date=${date}`}
-              className="bg-accent-soft text-accent flex h-14 items-center justify-center rounded-xl px-4 font-medium"
-            >
-              Photo
-            </Link>
-          )}
+        <button
+          onClick={() => setSlotPicker(true)}
+          className="border-accent/40 bg-accent-soft/50 flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left"
+        >
+          <span className="bg-accent text-accent-text flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
+            <SlotIcon width={20} height={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="text-muted block text-xs">Adding to</span>
+            <span className="block font-semibold">
+              {SLOT_LABELS[slot]} · {friendlyDate(date)}
+            </span>
+          </span>
+          <span className="text-accent flex items-center gap-0.5 text-sm font-medium">
+            Change <IconChevronDown width={16} height={16} />
+          </span>
+        </button>
+
+        <div className={cx("grid gap-2", profile.ai_enabled ? "grid-cols-4" : "grid-cols-3")}>
+          <ActionTile
+            icon={lookingUp ? undefined : IconBarcode}
+            label={lookingUp ? "Looking up…" : "Scan"}
+            onClick={() => setScanning(true)}
+            disabled={lookingUp}
+            primary
+          />
+          {profile.ai_enabled && <ActionTile icon={IconCamera} label="Photo" href={`/log/photo?slot=${slot}&date=${date}`} />}
+          <ActionTile icon={IconBolt} label="Quick kJ" onClick={() => setQuickOpen(true)} />
+          <ActionTile icon={IconEdit} label="New food" href={newFoodHref()} />
         </div>
 
         <label className="border-border bg-surface focus-within:border-accent flex h-12 items-center gap-2 rounded-xl border px-3">
@@ -188,11 +264,28 @@ export function LogView() {
           {searching && <Spinner className="text-muted h-4 w-4" />}
         </label>
 
+        {results !== null && (
+          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4">
+            {FILTERS.map(([f, label]) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cx(
+                  "h-8 shrink-0 rounded-full border px-3 text-sm",
+                  filter === f ? "border-accent bg-accent text-accent-text" : "border-border bg-surface",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {results !== null ? (
           <Card>
             {results.length === 0 && !searching ? (
               <Empty>
-                No matches.{" "}
+                {allResults && allResults.length > 0 ? "Nothing with this filter. " : "No matches. "}
                 <Link href={newFoodHref()} className="text-accent">
                   Create a food
                 </Link>
@@ -205,8 +298,8 @@ export function LogView() {
                   </li>
                 ))}
                 <li>
-                  <Link href={newFoodHref()} className="text-accent block px-4 py-3 text-sm">
-                    + Create a food
+                  <Link href={newFoodHref()} className="text-accent flex items-center gap-2 px-4 py-3 text-sm">
+                    <IconPlus width={16} height={16} /> Can&apos;t find it? Create a food
                   </Link>
                 </li>
               </ul>
@@ -215,19 +308,16 @@ export function LogView() {
         ) : (
           <>
             <div className="bg-surface-2 flex rounded-xl p-1">
-              {(
-                [
-                  ["frequent", "Frequent"],
-                  ["mine", "My foods"],
-                  ["recipes", "Recipes"],
-                  ["meals", "Meals"],
-                ] as [Tab, string][]
-              ).map(([t, label]) => (
+              {TABS.map(([t, label, TabIcon]) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={cx("h-9 flex-1 rounded-lg text-sm", tab === t && "bg-surface font-medium shadow-sm")}
+                  className={cx(
+                    "flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg text-xs",
+                    tab === t ? "bg-surface text-text font-medium shadow-sm" : "text-muted",
+                  )}
                 >
+                  <TabIcon width={16} height={16} />
                   {label}
                 </button>
               ))}
@@ -240,7 +330,7 @@ export function LogView() {
                     <Spinner />
                   </div>
                 ) : frequent.length === 0 ? (
-                  <Empty>Foods you log will show up here for one-tap re-logging.</Empty>
+                  <Empty>Foods you log show up here, so you can add them again with one tap.</Empty>
                 ) : (
                   <ul className="divide-border divide-y">
                     {frequent.map((f) => (
@@ -268,7 +358,7 @@ export function LogView() {
                                   nutrients: f.lastNutrients,
                                 },
                               ],
-                              `Added ${f.name} to ${SLOT_LABELS[slot]}`,
+                              `${f.lastGrams ? `${Math.round(f.lastGrams)} g ` : ""}${f.name}`,
                             ).catch(() => toast("Could not add"))
                           }
                         >
@@ -284,15 +374,18 @@ export function LogView() {
 
             {tab === "mine" && (
               <Card>
-                <Link href={newFoodHref()} className="border-border text-accent block border-b px-4 py-3 text-sm">
-                  + Create a food
-                </Link>
+                <div className="border-border text-muted flex items-center justify-between gap-2 border-b px-4 py-2.5 text-xs">
+                  <span>Shared by everyone in the household</span>
+                  <Link href={newFoodHref()} className="text-accent flex items-center gap-1 text-sm font-medium">
+                    <IconPlus width={16} height={16} /> New food
+                  </Link>
+                </div>
                 {customFoods === null ? (
                   <div className="text-muted flex justify-center py-8">
                     <Spinner />
                   </div>
                 ) : customFoods.length === 0 ? (
-                  <Empty>Foods you create are private to you.</Empty>
+                  <Empty>Foods anyone in the household creates appear here for everyone.</Empty>
                 ) : (
                   <ul className="divide-border divide-y">
                     {customFoods.map((f) => (
@@ -307,8 +400,11 @@ export function LogView() {
 
             {tab === "recipes" && (
               <Card>
-                <Link href={`/log/recipe?slot=${slot}&date=${date}`} className="border-border text-accent block border-b px-4 py-3 text-sm">
-                  + Create a recipe
+                <Link
+                  href={`/log/recipe?slot=${slot}&date=${date}`}
+                  className="border-border text-accent flex items-center gap-2 border-b px-4 py-3 text-sm font-medium"
+                >
+                  <IconPlus width={16} height={16} /> New recipe
                 </Link>
                 {recipes === null ? (
                   <div className="text-muted flex justify-center py-8">
@@ -369,11 +465,7 @@ export function LogView() {
                           <button
                             className="bg-accent-soft text-accent mr-2 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm"
                             aria-label={`Add ${m.name} to ${SLOT_LABELS[slot]}`}
-                            onClick={() =>
-                              logEntries(savedMealToEntries(m, date, slot), `Added ${m.name} to ${SLOT_LABELS[slot]}`).catch(() =>
-                                toast("Could not add"),
-                              )
-                            }
+                            onClick={() => logEntries(savedMealToEntries(m, date, slot), m.name).catch(() => toast("Could not add"))}
                           >
                             <IconPlus width={16} height={16} />
                           </button>
@@ -393,12 +485,23 @@ export function LogView() {
       <FoodSheet
         food={selected?.food ?? null}
         initialGrams={selected?.grams}
+        notice={
+          justSaved && (selected?.food.kind === "custom" || selected?.food.kind === "recipe") ? (
+            <span className="flex items-start gap-2">
+              <IconCheck width={18} height={18} className="mt-0.5 shrink-0" />
+              <span>
+                Saved to {selected.food.kind === "recipe" ? "recipes" : "our foods"}. <strong>It&apos;s not logged yet</strong> — pick an
+                amount below to add it to {SLOT_LABELS[slot]}, or close to skip.
+              </span>
+            </span>
+          ) : undefined
+        }
         onClose={() => setSelected(null)}
         date={date}
         slot={slot}
         unit={unit}
         onAdd={async (entry) => {
-          await logEntries([entry], `Added to ${SLOT_LABELS[entry.slot]}`);
+          await logEntries([entry], `${Math.round(entry.grams ?? 0)} g ${entry.name}`);
           setSlot(entry.slot);
           setSelected(null);
         }}
@@ -407,7 +510,7 @@ export function LogView() {
       <Sheet open={!!missingBarcode} onClose={() => setMissingBarcode(null)} title="Product not found">
         <p className="text-muted mb-4 text-sm">
           Barcode <span className="tabular text-text">{missingBarcode}</span> isn&apos;t in Open Food Facts or USDA. Create it from the
-          nutrition panel — it&apos;ll be saved privately to your foods.
+          nutrition panel and it&apos;ll be added to the household&apos;s foods.
         </p>
         <div className="flex gap-2">
           <Button
@@ -426,21 +529,40 @@ export function LogView() {
         </div>
       </Sheet>
 
-      <Sheet open={slotPicker} onClose={() => setSlotPicker(false)} title="Add to">
+      <QuickAddSheet
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        date={date}
+        slot={slot}
+        unit={unit}
+        onSave={async (e) => {
+          await logEntries([e], e.name);
+          setQuickOpen(false);
+        }}
+      />
+
+      <Sheet open={slotPicker} onClose={() => setSlotPicker(false)} title="Which meal?">
         <div className="grid grid-cols-2 gap-2">
-          {MEAL_SLOTS.map((s) => (
-            <Button
-              key={s}
-              variant={s === slot ? "primary" : "secondary"}
-              onClick={() => {
-                setSlot(s);
-                setSlotPicker(false);
-              }}
-            >
-              {SLOT_LABELS[s]}
-            </Button>
-          ))}
+          {MEAL_SLOTS.map((s) => {
+            const I = SLOT_ICONS[s];
+            return (
+              <Button
+                key={s}
+                variant={s === slot ? "primary" : "secondary"}
+                className="h-14 justify-start"
+                onClick={() => {
+                  setSlot(s);
+                  setSlotPicker(false);
+                }}
+              >
+                <I width={18} height={18} /> {SLOT_LABELS[s]}
+              </Button>
+            );
+          })}
         </div>
+        {date !== today() && (
+          <p className="text-muted mt-3 text-center text-xs">Logging to {friendlyDate(date)}. Go to that day on Today to change it.</p>
+        )}
       </Sheet>
     </>
   );
@@ -456,6 +578,42 @@ function FoodRow({ food, unit, onClick }: { food: Food; unit: ReturnType<typeof 
         </div>
         <MacroLine n={food.per100} unit={unit} />
       </div>
+    </button>
+  );
+}
+
+function ActionTile({
+  icon: TileIcon,
+  label,
+  onClick,
+  href,
+  disabled,
+  primary,
+}: {
+  icon?: Icon;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  disabled?: boolean;
+  primary?: boolean;
+}) {
+  const cls = cx(
+    "flex h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl text-xs font-medium transition active:scale-[0.97] disabled:opacity-60",
+    primary ? "bg-accent text-accent-text" : "bg-surface border-border border",
+  );
+  const body = (
+    <>
+      {TileIcon ? <TileIcon width={22} height={22} /> : <Spinner />}
+      {label}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={cls}>
+      {body}
+    </Link>
+  ) : (
+    <button onClick={onClick} disabled={disabled} className={cls}>
+      {body}
     </button>
   );
 }
