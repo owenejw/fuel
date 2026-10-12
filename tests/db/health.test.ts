@@ -15,7 +15,11 @@ describe("Apple Health sync", () => {
 
   beforeAll(async () => {
     test = await createTestDb();
-    pid = (await test.query<{ id: string }>(`insert into profiles (name, health_key_hash) values ('Health Test', $1) returning id`, [hashKey("kj_secret_test_key")])).rows[0].id;
+    pid = (
+      await test.query<{ id: string }>(`insert into profiles (name, health_key_hash) values ('Health Test', $1) returning id`, [
+        hashKey("kj_secret_test_key"),
+      ])
+    ).rows[0].id;
     await test.query(
       `insert into log_entries (profile_id, date, time, slot, kind, name, grams, nutrients) values
         ($1, $2, '08:00', 'breakfast', 'quick', 'Oats', 60, '{"energy_kj": 950, "protein_g": 8, "carbs_g": 40, "fat_g": 5}'),
@@ -45,7 +49,12 @@ describe("Apple Health sync", () => {
     expect(r).toEqual({ weight: true, active_energy: true, workouts: 1 });
     expect((await test.query(`select kg from weights where profile_id = $1`, [pid])).rows).toEqual([{ kg: 78.4 }]);
     expect((await test.query(`select active_kj from activity_days where profile_id = $1`, [pid])).rows).toEqual([{ active_kj: 2092 }]);
-    const w = (await test.query<{ type: string; duration_min: number; source: string }>(`select type, duration_min, source from workouts where profile_id = $1`, [pid])).rows;
+    const w = (
+      await test.query<{ type: string; duration_min: number; source: string }>(
+        `select type, duration_min, source from workouts where profile_id = $1`,
+        [pid],
+      )
+    ).rows;
     expect(w).toEqual([{ type: "soccer", duration_min: 60, source: "healthkit" }]);
     // Re-sending the same workout doesn't duplicate it.
     await importFromHealth(pid, { workouts: [{ start: "2026-10-12T07:00:00+11:00", minutes: 60, type: "Soccer" }] }, today);
