@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { IconBook, IconCalendar, IconChart, IconPlus, IconToday, type Icon } from "./icons";
 import { cx } from "./ui";
 
@@ -18,7 +19,10 @@ const RIGHT: Tab[] = [
 
 /** Floating capsule nav. Settings lives behind the avatar on Today. */
 export function TabBar() {
-  const pathname = usePathname();
+  const realPath = usePathname();
+  // Highlight the tapped tab immediately, before the page has loaded.
+  const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
+  const pathname = pending && pending.from === realPath ? pending.to : realPath;
   const isActive = (t: Tab) =>
     (t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)) || !!t.match?.some((m) => pathname.startsWith(m));
   const logActive = pathname.startsWith("/log");
@@ -29,6 +33,7 @@ export function TabBar() {
       <li key={t.href} className="flex-1">
         <Link
           href={t.href}
+          onClick={() => setPending({ from: realPath, to: t.href })}
           className={cx(
             "flex h-14 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] font-semibold transition",
             active ? "text-accent bg-white/10" : "text-white/75",

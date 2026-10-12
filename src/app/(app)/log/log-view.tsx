@@ -162,23 +162,31 @@ export function LogView() {
   }, [foodParam]);
 
   /** Log entries and confirm exactly where they went, with Undo. */
+  // Confirms straight away; the save carries on in the background.
   const logEntries = useCallback(
     async (items: NewEntry[], what: string) => {
-      const added = await addEntries(items);
+      const saving = addEntries(items);
       const where = `${SLOT_LABELS[items[0].slot]} · ${friendlyDate(items[0].date)}`;
       toast(`Added ${what} to ${where}`, {
         label: "Undo",
         onClick: () => {
-          deleteEntries(added.map((e) => e.id)).then(
-            () => {
-              toast("Removed");
-              refreshFrequent();
-            },
-            () => toast("Could not undo"),
-          );
+          saving
+            .then((added) => deleteEntries(added.map((e) => e.id)))
+            .then(
+              () => {
+                toast("Removed");
+                refreshFrequent();
+              },
+              () => toast("Could not undo"),
+            );
         },
       });
-      refreshFrequent();
+      try {
+        await saving;
+        refreshFrequent();
+      } catch {
+        toast(`Couldn't add ${what} — check your connection and try again`);
+      }
     },
     [toast, refreshFrequent],
   );
@@ -465,7 +473,7 @@ export function LogView() {
                           <button
                             className="bg-accent-soft text-accent mr-2 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm"
                             aria-label={`Add ${m.name} to ${SLOT_LABELS[slot]}`}
-                            onClick={() => logEntries(savedMealToEntries(m, date, slot), m.name).catch(() => toast("Could not add"))}
+                            onClick={() => void logEntries(savedMealToEntries(m, date, slot), m.name)}
                           >
                             <IconPlus width={16} height={16} />
                           </button>
@@ -501,7 +509,8 @@ export function LogView() {
         slot={slot}
         unit={unit}
         onAdd={async (entry) => {
-          await logEntries([entry], `${Math.round(entry.grams ?? 0)} g ${entry.name}`);
+          setSelected(null);
+          void logEntries([entry], `${Math.round(entry.grams ?? 0)} g ${entry.name}`);
           setSlot(entry.slot);
           setSelected(null);
         }}
@@ -536,8 +545,8 @@ export function LogView() {
         slot={slot}
         unit={unit}
         onSave={async (e) => {
-          await logEntries([e], e.name);
           setQuickOpen(false);
+          void logEntries([e], e.name);
         }}
       />
 

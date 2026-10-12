@@ -90,32 +90,110 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return <section className={cx("bg-surface rounded-3xl", className)}>{children}</section>;
 }
 
-/** Bottom sheet modal: slides up on a blue gradient so it stands apart from the page behind. */
+/** Bottom sheet modal: slides up on a blue gradient; drag it down, tap behind it or press × to close. */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const dragged = useRef(false);
   // Keep the content mounted while the closing animation plays.
   const [shown, setShown] = useState(open);
   const [lastChildren, setLastChildren] = useState(children);
   if (open && !shown) setShown(true);
   if (open && lastChildren !== children) setLastChildren(children);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) {
       d.classList.remove("closing");
+      d.style.transform = "";
+      d.style.transition = "";
+      dragged.current = false;
       d.showModal();
     }
     if (!open && d.open) {
-      d.classList.add("closing");
-      const t = setTimeout(() => {
-        d.classList.remove("closing");
-        d.close();
-        setShown(false);
-      }, 220);
+      // A drag already slid it away; otherwise play the closing animation.
+      if (!dragged.current) d.classList.add("closing");
+      const t = setTimeout(
+        () => {
+          d.classList.remove("closing");
+          d.close();
+          d.style.transform = "";
+          d.style.transition = "";
+          setShown(false);
+        },
+        dragged.current ? 0 : 220,
+      );
       return () => clearTimeout(t);
     }
   }, [open]);
+
+  // Drag down to dismiss. Touch events so we can stop the page scrolling while dragging.
+  useEffect(() => {
+    const d = ref.current;
+    if (!d || !shown) return;
+    let startY = 0;
+    let startT = 0;
+    let dy = 0;
+    let active = false;
+    let decided = false;
+    const onStart = (e: TouchEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.closest("input, textarea, select, [data-no-drag]")) return;
+      startY = e.touches[0].clientY;
+      startT = performance.now();
+      dy = 0;
+      active = true;
+      decided = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!active) return;
+      const delta = e.touches[0].clientY - startY;
+      if (!decided) {
+        if (Math.abs(delta) < 6) return;
+        const atTop = (scroller.current?.scrollTop ?? 0) <= 0;
+        decided = true;
+        if (!(delta > 0 && atTop)) {
+          active = false;
+          return;
+        }
+        d.style.transition = "none";
+      }
+      e.preventDefault();
+      dy = Math.max(0, delta);
+      d.style.transform = `translateY(${dy}px)`;
+    };
+    const onEnd = () => {
+      if (!active || !decided) {
+        active = false;
+        return;
+      }
+      active = false;
+      const velocity = dy / Math.max(1, performance.now() - startT);
+      d.style.transition = "transform 0.24s cubic-bezier(0.2, 0.9, 0.25, 1)";
+      if (dy > Math.min(140, d.offsetHeight * 0.3) || velocity > 0.6) {
+        dragged.current = true;
+        d.style.transform = "translateY(100%)";
+        setTimeout(() => close.current(), 200);
+      } else {
+        d.style.transform = "";
+      }
+    };
+    d.addEventListener("touchstart", onStart, { passive: true });
+    d.addEventListener("touchmove", onMove, { passive: false });
+    d.addEventListener("touchend", onEnd);
+    d.addEventListener("touchcancel", onEnd);
+    return () => {
+      d.removeEventListener("touchstart", onStart);
+      d.removeEventListener("touchmove", onMove);
+      d.removeEventListener("touchend", onEnd);
+      d.removeEventListener("touchcancel", onEnd);
+    };
+  }, [shown]);
 
   return (
     <dialog
@@ -130,7 +208,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
     >
       {shown && (
         <div className="flex max-h-[92dvh] flex-col">
-          <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
+          <div className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-white/20" aria-hidden />
           <div className="flex items-center justify-between gap-2 px-5 pt-3 pb-2">
             <div className="min-w-0 flex-1 text-lg font-semibold">{title}</div>
             <button
@@ -141,7 +219,9 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
               <IconClose width={18} height={18} />
             </button>
           </div>
-          <div className="pb-safe overflow-y-auto px-5 pb-5">{open ? children : lastChildren}</div>
+          <div ref={scroller} className="pb-safe overflow-y-auto overscroll-contain px-5 pb-5">
+            {open ? children : lastChildren}
+          </div>
         </div>
       )}
     </dialog>

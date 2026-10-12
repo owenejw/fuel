@@ -10,6 +10,22 @@ import type { LogEntry } from "./types";
 import type { DayBundle } from "@/server/repo";
 import { useApp } from "@/components/app-provider";
 
+function optimisticEntry(it: NewEntry, id: string): LogEntry {
+  return {
+    id,
+    date: it.date,
+    time: it.time ?? "00:00:00",
+    slot: it.slot,
+    kind: it.kind,
+    reference_food_id: it.kind === "reference" ? (it.food_id ?? null) : null,
+    custom_food_id: it.kind === "custom" ? (it.food_id ?? null) : null,
+    recipe_id: it.kind === "recipe" ? (it.food_id ?? null) : null,
+    name: it.name,
+    grams: it.grams,
+    nutrients: it.nutrients,
+  } as LogEntry;
+}
+
 /** Everything Today needs for one date, with an offline copy and optimistic updates. */
 export function useDay(date: string) {
   const { profileId } = useApp();
@@ -55,11 +71,20 @@ export function useDay(date: string) {
 
   const setEntries = useCallback((fn: (e: LogEntry[]) => LogEntry[]) => setDay((d) => ({ ...d, entries: fn(d.entries) })), [setDay]);
 
+  // Optimistic: show new entries straight away with temporary ids, then swap in the saved rows.
   const add = useCallback(
     async (items: NewEntry[]) => {
-      const saved = await addEntries(items);
-      setEntries((cur) => [...cur, ...saved.filter((e) => e.date === date)]);
-      return saved;
+      const tmp = items.map((it, i) => optimisticEntry(it, `tmp-${Date.now()}-${i}`));
+      const tmpIds = new Set(tmp.map((e) => e.id));
+      setEntries((cur) => [...cur, ...tmp.filter((e) => e.date === date)]);
+      try {
+        const saved = await addEntries(items);
+        setEntries((cur) => [...cur.filter((e) => !tmpIds.has(e.id)), ...saved.filter((e) => e.date === date)]);
+        return saved;
+      } catch (err) {
+        setEntries((cur) => cur.filter((e) => !tmpIds.has(e.id)));
+        throw err;
+      }
     },
     [date, setEntries],
   );
@@ -81,11 +106,18 @@ export function useDay(date: string) {
 
   const update = useCallback(
     async (id: string, patch: Parameters<typeof updateEntry>[1]) => {
-      const saved = await updateEntry(id, patch);
-      setEntries((cur) => cur.map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
-      return saved;
+      const prev = day?.entries ?? [];
+      setEntries((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)).filter((e) => e.date === date));
+      try {
+        const saved = await updateEntry(id, patch);
+        setEntries((cur) => cur.map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
+        return saved;
+      } catch (err) {
+        setEntries(() => prev);
+        throw err;
+      }
     },
-    [date, setEntries],
+    [date, day, setEntries],
   );
 
   return { day, entries: day?.entries ?? null, loading: day === null, offline, refresh, add, remove, update, setDay };

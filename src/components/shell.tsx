@@ -1,0 +1,92 @@
+"use client";
+
+import { useEffect, useRef, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+
+// Tab roots: nothing to go back to, so no edge swipe there.
+const ROOTS = ["/", "/diary", "/trends", "/plan"];
+
+/**
+ * Wraps each page: a short fade-in on navigation, and (when installed to the Home Screen, where iOS
+ * has no back gesture of its own) swipe in from the left edge to go back.
+ */
+export function Shell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const page = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = page.current;
+    if (!el || ROOTS.includes(pathname)) return;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!standalone) return;
+
+    let startX = 0;
+    let startY = 0;
+    let startT = 0;
+    let dx = 0;
+    let tracking = false;
+    let dragging = false;
+
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t.clientX > 28 || document.querySelector("dialog[open]")) return;
+      startX = t.clientX;
+      startY = t.clientY;
+      startT = performance.now();
+      dx = 0;
+      tracking = true;
+      dragging = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!tracking) return;
+      const t = e.touches[0];
+      const x = t.clientX - startX;
+      const y = t.clientY - startY;
+      if (!dragging) {
+        if (Math.abs(x) < 8 && Math.abs(y) < 8) return;
+        if (Math.abs(y) > Math.abs(x) || x < 0) {
+          tracking = false;
+          return;
+        }
+        dragging = true;
+        el.style.transition = "none";
+        el.style.boxShadow = "-12px 0 32px rgba(0,0,0,0.6)";
+      }
+      e.preventDefault();
+      dx = Math.max(0, x);
+      el.style.transform = `translateX(${dx}px)`;
+    };
+    const onEnd = () => {
+      if (!tracking) return;
+      tracking = false;
+      if (!dragging) return;
+      const velocity = dx / Math.max(1, performance.now() - startT);
+      el.style.transition = "transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1)";
+      if (dx > window.innerWidth * 0.35 || velocity > 0.5) {
+        el.style.transform = "translateX(100%)";
+        setTimeout(() => (window.history.length > 1 ? router.back() : router.push("/")), 180);
+      } else {
+        el.style.transform = "";
+        setTimeout(() => (el.style.boxShadow = ""), 220);
+      }
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
+    };
+  }, [pathname, router]);
+
+  return (
+    <div ref={page} key={pathname} className="page-in bg-bg mx-auto min-h-dvh max-w-lg pb-32">
+      {children}
+    </div>
+  );
+}
