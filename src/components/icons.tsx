@@ -28,6 +28,7 @@ import {
   Flame,
   Footprints,
   Globe,
+  HeartPulse,
   HardHat,
   House,
   Leaf,
@@ -157,3 +158,4 @@ export const IconSun: Icon = Sun;
 export const IconMoon: Icon = Moon;
 export const IconDumbbell: Icon = Dumbbell;
 export const IconRest: Icon = Armchair;
+export const IconHeart: Icon = HeartPulse;

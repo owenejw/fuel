@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { PASS_COOKIE } from "@/lib/passcode";
 
 /** Paths reachable without a chosen profile. */
-const OPEN_PATHS = ["/profiles", "/unlock", "/offline", "/api/cron"];
+const OPEN_PATHS = ["/profiles", "/unlock", "/offline", "/api/cron", "/api/health"];
 
 async function sha256(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -18,7 +18,8 @@ export async function proxy(request: NextRequest) {
   const open = (p: string) => pathname === p || pathname.startsWith(`${p}/`);
 
   const passcode = process.env.APP_PASSCODE;
-  if (passcode && !open("/unlock") && !open("/api/cron")) {
+  // The cron and Apple Health endpoints authenticate with their own secret instead.
+  if (passcode && !open("/unlock") && !open("/api/cron") && !open("/api/health")) {
     const ok = request.cookies.get(PASS_COOKIE)?.value === (await sha256(`fuel:${passcode}`));
     if (!ok) {
       if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Locked" }, { status: 401 });

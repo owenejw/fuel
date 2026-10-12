@@ -175,6 +175,11 @@ export function TodayView() {
               {/* Training */}
               <Tile title="Training" href="/plan">
                 <TrainingSummary workouts={day.plan.workouts} training={day.plan.training} />
+                {summary?.activeKj != null && (
+                  <div className="mt-1 text-xs" style={{ color: METRIC.energy.color }}>
+                    Burned {kj(summary.activeKj, unit)} {unitLabel(unit)} active
+                  </div>
+                )}
               </Tile>
 
               {/* Weight */}

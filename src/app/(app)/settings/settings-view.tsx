@@ -8,6 +8,8 @@ import { Button, Card, Input, PageHeader, SectionTitle, Toggle } from "@/compone
 import Link from "next/link";
 import {
   IconBell,
+  IconCopy,
+  IconHeart,
   IconChevronLeft,
   IconCalendarSync,
   IconCarbs,
@@ -29,6 +31,7 @@ import { fromUnit, formatEnergy, toUnit, unitLabel } from "@/lib/energy";
 import { PROTEIN_G_PER_KG } from "@/lib/tdee";
 import type { DayTargets, Profile } from "@/lib/types";
 import { saveProfile } from "@/server/actions/profile";
+import { createHealthKey, getHealthStatus } from "@/server/actions/health";
 import { aiAvailable } from "@/server/actions/ai";
 import { getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
 import { removePushSubscription, savePushSubscription } from "@/server/actions/push";
@@ -76,6 +79,7 @@ export function SettingsView() {
         <ProfileSection profile={profile} save={save} />
         <TargetsSection />
         <AiSection profile={profile} save={save} />
+        <HealthSection />
         <CalendarSection profile={profile} save={save} />
         <RemindersSection profile={profile} save={save} />
         <Section title="Export" icon={IconDownload}>
@@ -330,6 +334,77 @@ function AiSection({ profile, save }: { profile: Profile; save: SaveFn }) {
             onChange={(v) => save({ ai_enabled: v })}
           />
         )}
+      </Card>
+    </Section>
+  );
+}
+
+const SHORTCUT_NAME = "kilo JOL Sync";
+
+function HealthSection() {
+  const toast = useToast();
+  const [status, setStatus] = useState<{ hasKey: boolean; syncedAt: string | null } | null>(null);
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    getHealthStatus().then(setStatus, () => undefined);
+  }, []);
+
+  async function makeKey() {
+    if (
+      status?.hasKey &&
+      !confirm("Make a new sync key? The old one stops working, so you'll need to paste the new one into the shortcut.")
+    )
+      return;
+    try {
+      setKey(await createHealthKey());
+      setStatus((s) => ({ hasKey: true, syncedAt: s?.syncedAt ?? null }));
+    } catch {
+      toast("Couldn't make a key — try again");
+    }
+  }
+
+  return (
+    <Section title="Apple Health" icon={IconHeart}>
+      <Card className="space-y-3 p-4">
+        <p className="text-muted text-sm">
+          The <strong className="text-text">{SHORTCUT_NAME}</strong> shortcut brings your weight, active kJ and workouts in from Apple
+          Health, and writes the food and water you log here back to Health.
+        </p>
+        {key ? (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Your sync key</div>
+            <div className="bg-surface-2 tabular rounded-xl px-3 py-2.5 font-mono text-sm break-all select-all">{key}</div>
+            <Button
+              className="w-full"
+              onClick={() =>
+                navigator.clipboard.writeText(key).then(
+                  () => toast("Copied — paste it into the shortcut"),
+                  () => toast("Couldn't copy — select it and copy"),
+                )
+              }
+            >
+              <IconCopy width={16} height={16} /> Copy key
+            </Button>
+            <p className="text-muted text-xs">This is only shown once. Keep it private — anyone with it can add data to your profile.</p>
+          </div>
+        ) : (
+          <Button variant={status?.hasKey ? "secondary" : "primary"} className="w-full" onClick={makeKey}>
+            {status?.hasKey ? "Make a new sync key" : "Create my sync key"}
+          </Button>
+        )}
+        {status?.hasKey && (
+          <a
+            href={`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`}
+            className="bg-accent text-accent-text flex h-11 items-center justify-center gap-2 rounded-xl font-medium active:scale-[0.98]"
+          >
+            <IconHeart width={16} height={16} /> Sync now
+          </a>
+        )}
+        <p className="text-muted text-xs">
+          {status?.syncedAt
+            ? `Last synced ${new Date(status.syncedAt).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })}`
+            : "Not synced yet"}
+        </p>
       </Card>
     </Section>
   );

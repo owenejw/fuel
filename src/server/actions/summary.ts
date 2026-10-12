@@ -38,7 +38,7 @@ export async function fetchSummary(d: string) {
   const pid = await requireProfileId();
   const day = date.parse(d);
   const q = await db();
-  const [days, logged, weights] = await Promise.all([
+  const [days, logged, weights, activity] = await Promise.all([
     week(pid, day),
     q.query<{ d: string }>(
       `select distinct to_char(date, 'YYYY-MM-DD') as d from log_entries where profile_id = $1 and date between $2 and $3 order by d desc`,
@@ -49,10 +49,13 @@ export async function fetchSummary(d: string) {
       addDays(day, -30),
       day,
     ]),
+    q.query<{ active_kj: number }>(`select active_kj from activity_days where profile_id = $1 and date = $2`, [pid, day]),
   ]);
   return {
     week: days,
     loggedDays: logged.map((r) => r.d),
     weights: weights.map((w) => ({ date: String(w.date).slice(0, 10), kg: Number(w.kg) })),
+    /** Active energy burned today, from Apple Health (null if never synced). */
+    activeKj: activity[0] ? Number(activity[0].active_kj) : null,
   };
 }

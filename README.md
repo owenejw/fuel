@@ -90,6 +90,16 @@ The AFCD import reads the **All solids & liquids per 100 g** sheet of the Releas
 5. **Fuelling windows:** before a session, carbs get extra weight, and fat, fibre and low-carb foods are penalised. After a session, protein and carbs are favoured.
 6. The top 5 are shown with what would be left if you ate them. 1–2 never-logged AFCD foods are added when a micronutrient is flagged for the week.
 
+## Apple Health (iPhone Shortcut)
+
+There's no web API for Apple Health, so a free iPhone Shortcut called **kilo JOL Sync** moves the data. Each person creates a sync key in **Settings → Apple Health** (only a hash is stored), puts it in the shortcut, and taps **Sync now**.
+
+1. The shortcut sends `POST /api/health/sync` with `Authorization: Bearer <sync key>` and an optional JSON body: `weight_kg`, `weight_date`, `active_energy_kj` or `active_energy_kcal` (today's total), and `workouts` (`[{start, end or minutes, type}]`). Numbers can be text. Weight goes into Trends, active energy shows on Today, and workouts are added to Plan (as `source = 'healthkit'`, deduplicated by start time).
+2. The reply lists food and water from the last 2 days that haven't been written to Health yet, as `energy_kj`, `protein_g`, `carbs_g`, `fat_g`, `fibre_g` and `water_ml`. Each is a list of `{value, date}` with an ISO date and local offset. Unknown nutrients are left out, never sent as 0. Water is the day's increase since the last sync.
+3. The shortcut writes each one with **Log Health Sample**, then sends the reply's `ack` to `POST /api/health/ack`, so those items aren't sent again.
+
+Shortcuts can't edit or delete Health samples, so a food edited after it was synced keeps its old values in Health. These two endpoints skip the household passcode and authenticate with the sync key instead.
+
 ## Reminders (web push)
 
 On iPhone, add kilo JOL to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so `.github/workflows/reminders.yml` does it from GitHub Actions instead: add the same `CRON_SECRET` as a repository secret (and optionally an `APP_URL` repository variable).
