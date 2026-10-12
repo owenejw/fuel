@@ -199,8 +199,8 @@ function WeekTab({ data, unit }: { data: Trends; unit: EnergyUnit }) {
         )}
       </Card>
       <Card className="space-y-4 p-4">
-        <p className="text-muted text-xs">Bars show what you ate; the dark dash is that day&apos;s target.</p>
-        <DailyChart data={data.week} valueKey="energy_kj" label={`Energy (${unitLabel(unit)})`} color="var(--accent)" format={fmtE} />
+        <p className="text-muted text-xs">Bars show what you ate; the dashed line is that day&apos;s target.</p>
+        <DailyChart data={data.week} valueKey="energy_kj" label={`Energy (${unitLabel(unit)})`} color="var(--energy)" format={fmtE} />
         <DailyChart
           data={data.week}
           valueKey="protein_g"
@@ -363,7 +363,7 @@ function WeightTab({ data, unit, onChange }: { data: Trends; unit: EnergyUnit; o
                     formatter={(v, name) => [`${Number(v).toFixed(1)} kg`, name === "kg" ? "Weigh-in" : "Trend"]}
                   />
                   <Scatter dataKey="kg" fill="var(--muted)" isAnimationActive={false} />
-                  <Line dataKey="trend" stroke="var(--accent)" strokeWidth={2} dot={false} type="monotone" isAnimationActive={false} />
+                  <Line dataKey="trend" stroke="var(--water-2)" strokeWidth={2} dot={false} type="monotone" isAnimationActive={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

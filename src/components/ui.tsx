@@ -3,6 +3,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type ComponentType,
   type InputHTMLAttributes,
@@ -86,35 +87,61 @@ export function Select({
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cx("border-border bg-surface rounded-2xl border", className)}>{children}</section>;
+  return <section className={cx("bg-surface rounded-3xl", className)}>{children}</section>;
 }
 
-/** Bottom sheet modal, thumb-reachable. */
+/** Bottom sheet modal: slides up on a blue gradient so it stands apart from the page behind. */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Keep the content mounted while the closing animation plays.
+  const [shown, setShown] = useState(open);
+  const [lastChildren, setLastChildren] = useState(children);
+  if (open && !shown) setShown(true);
+  if (open && lastChildren !== children) setLastChildren(children);
+
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
+    if (open && !d.open) {
+      d.classList.remove("closing");
+      d.showModal();
+    }
+    if (!open && d.open) {
+      d.classList.add("closing");
+      const t = setTimeout(() => {
+        d.classList.remove("closing");
+        d.close();
+        setShown(false);
+      }, 220);
+      return () => clearTimeout(t);
+    }
   }, [open]);
 
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
       onClick={(e) => e.target === ref.current && onClose()}
-      className="border-border bg-surface text-text m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-hidden rounded-t-3xl border p-0 backdrop:bg-black/50 sm:mx-auto sm:mb-auto sm:max-w-lg sm:rounded-3xl"
+      style={{ background: "var(--sheet)", borderColor: "var(--sheet-border)" }}
+      className="sheet text-text m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-hidden rounded-t-[28px] border border-b-0 p-0 shadow-[0_-12px_40px_rgba(10,40,120,0.45)] backdrop:bg-black/60 backdrop:backdrop-blur-sm sm:mx-auto sm:mb-auto sm:max-w-lg sm:rounded-[28px] sm:border-b"
     >
-      {open && (
+      {shown && (
         <div className="flex max-h-[92dvh] flex-col">
-          <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
+          <div className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
+          <div className="flex items-center justify-between gap-2 px-5 pt-3 pb-2">
             <div className="min-w-0 flex-1 text-lg font-semibold">{title}</div>
-            <button onClick={onClose} className="text-muted -mr-2 rounded-full p-2" aria-label="Close">
-              <IconClose width={20} height={20} />
+            <button
+              onClick={onClose}
+              className="-mr-2 rounded-full bg-white/10 p-2 text-white/80 outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              aria-label="Close"
+            >
+              <IconClose width={18} height={18} />
             </button>
           </div>
-          <div className="pb-safe overflow-y-auto px-4 pb-4">{children}</div>
+          <div className="pb-safe overflow-y-auto px-5 pb-5">{open ? children : lastChildren}</div>
         </div>
       )}
     </dialog>
@@ -132,10 +159,10 @@ export function Spinner({ className }: { className?: string }) {
 
 export function PageHeader({ title, right, left }: { title: ReactNode; right?: ReactNode; left?: ReactNode }) {
   return (
-    <header className="pt-safe bg-bg/90 sticky top-0 z-20 backdrop-blur">
-      <div className="flex h-14 items-center gap-2 px-4">
+    <header className="pt-safe bg-bg/85 sticky top-0 z-20 backdrop-blur-xl">
+      <div className="flex h-16 items-center gap-2 px-4">
         {left}
-        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">{title}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-2xl font-bold tracking-tight">{title}</h1>
         {right}
       </div>
     </header>

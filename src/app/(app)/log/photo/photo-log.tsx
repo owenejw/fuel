@@ -85,7 +85,7 @@ export function PhotoLog() {
         })),
       );
       toast(`Logged ${items.length} item${items.length === 1 ? "" : "s"} to ${SLOT_LABELS[slot]}`);
-      router.replace(date === today() ? "/" : `/?date=${date}`);
+      router.replace(date === today() ? "/diary" : `/diary?date=${date}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not save");
       setBusy(false);

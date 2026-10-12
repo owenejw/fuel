@@ -6,7 +6,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <AppProvider>
-        <div className="mx-auto min-h-dvh max-w-lg pb-24">{children}</div>
+        <div className="mx-auto min-h-dvh max-w-lg pb-32">{children}</div>
         <TabBar />
       </AppProvider>
     </ToastProvider>
