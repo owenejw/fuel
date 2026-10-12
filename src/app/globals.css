@@ -1,42 +1,34 @@
 @import "tailwindcss";
 
-/* Colour tokens. Light by default, dark via prefers-color-scheme. */
+/* Colour tokens. Dark only, like Apple Fitness. Each nutrient keeps one colour everywhere:
+   energy = red-pink, protein = lime, carbs = cyan, fat = amber, fibre = violet, water = blue. */
 :root {
-  --bg: #f6f7f8;
-  --surface: #ffffff;
-  --surface-2: #f0f2f4;
-  --border: #e3e6ea;
-  --text: #121417;
-  --muted: #5f6b76;
-  --accent: #0f766e;
-  --accent-soft: #ccfbf1;
-  --accent-text: #ffffff;
-  --danger: #c2410c;
-  --warn: #b45309;
-  --protein: #2563eb;
-  --carbs: #d97706;
-  --fat: #db2777;
-  --fibre: #16a34a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0b0d0f;
-    --surface: #15181b;
-    --surface-2: #1d2125;
-    --border: #2a2f35;
-    --text: #eef1f4;
-    --muted: #97a3ae;
-    --accent: #2dd4bf;
-    --accent-soft: #123b37;
-    --accent-text: #04201d;
-    --danger: #fb923c;
-    --warn: #fbbf24;
-    --protein: #60a5fa;
-    --carbs: #fbbf24;
-    --fat: #f472b6;
-    --fibre: #4ade80;
-  }
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --border: #38383a;
+  --text: #ffffff;
+  --muted: #8e8e93;
+  --accent: #30d5c8;
+  --accent-soft: #0f3a37;
+  --accent-text: #00201d;
+  --danger: #ff453a;
+  --warn: #ffd60a;
+  --energy: #ff2d55;
+  --energy-2: #ff6482;
+  --protein: #a8f000;
+  --protein-2: #d4ff4d;
+  --carbs: #00d7f0;
+  --carbs-2: #6ff2ff;
+  --fat: #ffb020;
+  --fat-2: #ffd27a;
+  --fibre: #bf5af2;
+  --fibre-2: #da8fff;
+  --water: #0a84ff;
+  --water-2: #64b5ff;
+  --sheet: linear-gradient(180deg, #1d2b4f 0%, #121a33 45%, #0d1226 100%);
+  --sheet-border: rgba(120, 160, 255, 0.28);
 }
 
 @theme inline {
@@ -55,6 +47,8 @@
   --color-carbs: var(--carbs);
   --color-fat: var(--fat);
   --color-fibre: var(--fibre);
+  --color-energy: var(--energy);
+  --color-water: var(--water);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
@@ -86,4 +80,70 @@ textarea {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Bottom sheets: slide up over a blurred backdrop. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+dialog.sheet[open] {
+  animation: sheet-in 0.36s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+dialog.sheet[open]::backdrop {
+  animation: fade-in 0.3s ease-out;
+}
+dialog.sheet.closing {
+  animation: sheet-out 0.22s ease-in forwards;
+}
+dialog.sheet.closing::backdrop {
+  animation: fade-out 0.22s ease-in forwards;
+}
+@media (min-width: 640px) {
+  @keyframes sheet-in {
+    from {
+      transform: translateY(24px) scale(0.97);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet[open],
+  dialog.sheet.closing,
+  dialog.sheet[open]::backdrop,
+  dialog.sheet.closing::backdrop {
+    animation-duration: 0.01s;
+  }
 }

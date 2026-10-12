@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { addEntries, deleteEntries, fetchLogRange, getDay, updateEntry, type NewEntry } from "./data";
-import { addDays, today } from "./dates";
+import { addDays, parseDate, today } from "./dates";
+import { sumNutrients, type Nutrients } from "./nutrients";
+import { getDayPlans } from "@/server/actions/plan";
 import { rankFrequentFoods, type FrequentFood } from "./frequent";
 import { cacheGet, cachePruneLogs, cacheSet } from "./offline";
-import type { LogEntry } from "./types";
+import type { DayTargets, LogEntry } from "./types";
 import type { DayBundle } from "@/server/repo";
 import { useApp } from "@/components/app-provider";
 
@@ -109,4 +111,38 @@ export function useFrequentFoods() {
     refresh();
   }, [refresh]);
   return { foods, refresh };
+}
+
+export type WeekDay = { date: string; totals: Nutrients; targets: DayTargets; logged: boolean; training: boolean };
+
+/** Monday-to-Sunday totals against each day's targets, for the week strip and trend tiles. */
+export function useWeek(date: string, version = 0) {
+  const monday = addDays(date, -((parseDate(date).getDay() + 6) % 7));
+  const sunday = addDays(monday, 6);
+  const key = `${monday}:${version}`;
+  const [state, setState] = useState<{ key: string; days: WeekDay[] | null }>({ key, days: null });
+  useEffect(() => {
+    let live = true;
+    Promise.all([fetchLogRange(monday, sunday), getDayPlans(monday, sunday)]).then(
+      ([entries, plans]) => {
+        if (!live) return;
+        const days = plans.map((p) => {
+          const mine = entries.filter((e) => e.date === p.date);
+          return {
+            date: p.date,
+            totals: sumNutrients(mine.map((e) => e.nutrients)).totals,
+            targets: p.targets,
+            logged: mine.length > 0,
+            training: p.training,
+          };
+        });
+        setState({ key, days });
+      },
+      () => live && setState({ key, days: [] }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [key, monday, sunday]);
+  return state.key === key ? state.days : null;
 }

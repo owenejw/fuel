@@ -5,8 +5,10 @@ import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
 import { useToast } from "@/components/toast";
 import { Button, Card, Input, PageHeader, SectionTitle, Toggle } from "@/components/ui";
+import Link from "next/link";
 import {
   IconBell,
+  IconChevronLeft,
   IconCalendarSync,
   IconCarbs,
   IconDownload,
@@ -58,7 +60,14 @@ export function SettingsView() {
 
   return (
     <>
-      <PageHeader title="Settings" />
+      <PageHeader
+        title="Settings"
+        left={
+          <Link href="/" className="bg-surface -ml-1 flex h-10 w-10 items-center justify-center rounded-full" aria-label="Back to Today">
+            <IconChevronLeft width={22} height={22} />
+          </Link>
+        }
+      />
       <div className="space-y-6 px-4 pb-6">
         <ProfileSection profile={profile} save={save} />
         <TargetsSection />

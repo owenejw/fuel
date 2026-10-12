@@ -2,64 +2,61 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCalendar, IconChart, IconPlus, IconSettings, IconToday, type Icon } from "./icons";
+import { IconBook, IconCalendar, IconChart, IconPlus, IconToday, type Icon } from "./icons";
 import { cx } from "./ui";
 
-type Tab = { href: string; label: string; Icon: Icon };
+type Tab = { href: string; label: string; Icon: Icon; match?: string[] };
 
 const LEFT: Tab[] = [
-  { href: "/", label: "Today", Icon: IconToday },
-  { href: "/trends", label: "Trends", Icon: IconChart },
+  { href: "/", label: "Today", Icon: IconToday, match: ["/nutrition"] },
+  { href: "/diary", label: "Diary", Icon: IconBook },
 ];
 const RIGHT: Tab[] = [
+  { href: "/trends", label: "Trends", Icon: IconChart },
   { href: "/plan", label: "Plan", Icon: IconCalendar },
-  { href: "/settings", label: "Settings", Icon: IconSettings },
 ];
 
+/** Floating capsule nav. Settings lives behind the avatar on Today. */
 export function TabBar() {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const logActive = isActive("/log");
+  const isActive = (t: Tab) =>
+    (t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)) || !!t.match?.some((m) => pathname.startsWith(m));
+  const logActive = pathname.startsWith("/log");
 
-  const tab = ({ href, label, Icon }: Tab) => {
-    const active = isActive(href);
+  const tab = (t: Tab) => {
+    const active = isActive(t);
     return (
-      <li key={href} className="flex-1">
+      <li key={t.href} className="flex-1">
         <Link
-          href={href}
+          href={t.href}
           className={cx(
-            "flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition",
-            active ? "text-accent" : "text-muted",
+            "flex h-14 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] font-semibold transition",
+            active ? "text-accent bg-white/10" : "text-white/75",
           )}
           aria-current={active ? "page" : undefined}
         >
-          <Icon width={22} height={22} strokeWidth={active ? 2.4 : 1.9} />
-          {label}
+          <t.Icon width={22} height={22} strokeWidth={active ? 2.4 : 2} />
+          {t.label}
         </Link>
       </li>
     );
   };
 
   return (
-    <nav className="pb-safe border-border bg-surface/95 fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur">
-      <ul className="mx-auto flex max-w-lg items-stretch">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),12px)]">
+      <ul className="pointer-events-auto mx-auto flex max-w-lg items-center gap-1 rounded-full border border-white/10 bg-[#1c1c1e]/80 p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.6)] backdrop-blur-xl">
         {LEFT.map(tab)}
-        <li className="flex flex-1 justify-center">
+        <li className="flex shrink-0 justify-center px-1">
           <Link
             href="/log"
             aria-label="Log food"
             aria-current={logActive ? "page" : undefined}
-            className="group -mt-6 flex flex-col items-center gap-1 text-[11px] font-medium"
+            className={cx(
+              "bg-accent text-accent-text flex h-14 w-14 items-center justify-center rounded-full shadow-[0_4px_16px_rgba(48,213,200,0.45)] transition active:scale-95",
+              logActive && "ring-2 ring-white/60",
+            )}
           >
-            <span
-              className={cx(
-                "bg-accent text-accent-text ring-bg flex h-14 w-14 items-center justify-center rounded-full shadow-lg ring-4 transition group-active:scale-95",
-                logActive && "brightness-110",
-              )}
-            >
-              <IconPlus width={28} height={28} strokeWidth={2.6} />
-            </span>
-            <span className={logActive ? "text-accent" : "text-muted"}>Log</span>
+            <IconPlus width={28} height={28} strokeWidth={2.8} />
           </Link>
         </li>
         {RIGHT.map(tab)}
