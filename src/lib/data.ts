@@ -8,6 +8,7 @@ export {
   deleteEntries,
   fetchLog,
   fetchLogRange,
+  fetchLoggedDays,
   fetchRecentMeals,
   getDay,
   updateEntry,

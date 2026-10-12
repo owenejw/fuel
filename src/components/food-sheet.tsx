@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { friendlyDate } from "@/lib/dates";
 import { SOURCE_LABELS, nutrientsFor } from "@/lib/foods/shared";
 import type { NewEntry } from "@/lib/data";
 import type { EnergyUnit } from "@/lib/energy";
-import { MEAL_SLOTS, SLOT_LABELS, type Food, type MealSlot } from "@/lib/types";
+import { SLOT_LABELS, type Food, type MealSlot } from "@/lib/types";
+import { SlotChips } from "./slot-chips";
 import { NutrientTable } from "./nutrition";
 import { Button, Sheet, cx } from "./ui";
 
@@ -19,7 +21,10 @@ export function FoodSheet({
   initialGrams,
   onAdd,
   submitLabel = "Add",
+  notice,
 }: {
+  /** Shown at the top, e.g. "Saved — not logged yet". */
+  notice?: React.ReactNode;
   food: Food | null;
   onClose: () => void;
   date: string;
@@ -44,6 +49,7 @@ export function FoodSheet({
         )
       }
     >
+      {food && notice && <div className="bg-accent-soft text-accent mb-4 rounded-xl px-3 py-2.5 text-sm">{notice}</div>}
       {food && (
         <FoodSheetBody
           key={`${food.kind}:${food.id}:${initialGrams ?? ""}`}
@@ -162,18 +168,7 @@ function FoodSheetBody({
         ))}
       </div>
 
-      <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-        {MEAL_SLOTS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setSlot(s)}
-            className={cx("h-9 shrink-0 rounded-full px-3 text-sm", slot === s ? "bg-accent text-accent-text" : "bg-surface-2")}
-          >
-            {SLOT_LABELS[s]}
-          </button>
-        ))}
-      </div>
+      <SlotChips value={slot} onChange={setSlot} />
 
       <NutrientTable n={nutrients} unit={unit} />
       {food.kind === "recipe" && (
@@ -189,7 +184,7 @@ function FoodSheetBody({
 
       {error && <p className="text-danger text-sm">{error}</p>}
       <Button className="w-full" size="lg" onClick={add} disabled={busy || !grams}>
-        {busy ? "Adding…" : `${submitLabel} ${Math.round(grams)} g to ${SLOT_LABELS[slot]}`}
+        {busy ? "Adding…" : `${submitLabel} ${Math.round(grams)} g to ${SLOT_LABELS[slot]} · ${friendlyDate(date)}`}
       </Button>
     </div>
   );

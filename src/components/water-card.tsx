@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addWater } from "@/lib/data";
+import { IconWater } from "./icons";
 import { Card } from "./ui";
 
 export function WaterCard({ date, ml, target, onChange }: { date: string; ml: number; target: number; onChange: (ml: number) => void }) {
@@ -17,8 +18,13 @@ export function WaterCard({ date, ml, target, onChange }: { date: string; ml: nu
   };
   return (
     <Card className="p-4">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="font-semibold">Water</h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-500">
+            <IconWater width={16} height={16} />
+          </span>
+          Water
+        </h2>
         <span className="tabular text-muted text-sm">
           {(ml / 1000).toFixed(2)} / {(target / 1000).toFixed(1)} L
         </span>

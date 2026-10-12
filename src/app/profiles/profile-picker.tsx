@@ -32,7 +32,7 @@ export function ProfilePicker() {
       <div className="mb-8 flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icons/icon-192.png" alt="" width={44} height={44} className="rounded-xl" />
-        <span className="text-2xl font-semibold">Fuel</span>
+        <span className="text-2xl font-semibold">kilo JOL</span>
       </div>
       <h1 className="mb-1 text-xl font-semibold">Who&apos;s this?</h1>
       <p className="text-muted mb-6 text-sm">This device will remember your choice. You can switch any time in Settings.</p>

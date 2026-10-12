@@ -3,9 +3,11 @@
 import { useState } from "react";
 import type { EnergyUnit } from "@/lib/energy";
 import { scaleNutrients } from "@/lib/nutrients";
-import { MEAL_SLOTS, SLOT_LABELS, type LogEntry, type MealSlot } from "@/lib/types";
+import type { LogEntry, MealSlot } from "@/lib/types";
+import { IconTrash } from "./icons";
 import { NutrientTable } from "./nutrition";
-import { Button, Input, Select, Sheet } from "./ui";
+import { SlotChips } from "./slot-chips";
+import { Button, Sheet, Stepper } from "./ui";
 
 /** Edit the amount or meal of a logged food, or delete it. */
 export function EntrySheet({
@@ -67,23 +69,16 @@ function EntryForm({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          label="Amount (g)"
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="any"
-          value={grams}
-          onChange={(e) => setGrams(e.target.value)}
-        />
-        <Select
-          label="Meal"
-          value={slot}
-          onChange={(v) => setSlot(v as MealSlot)}
-          options={MEAL_SLOTS.map((s) => ({ value: s, label: SLOT_LABELS[s] }))}
-        />
-      </div>
+      <Stepper
+        label="Amount"
+        unit="g"
+        step={10}
+        max={10000}
+        decimals={1}
+        value={grams === "" ? null : Number(grams)}
+        onChange={(v) => setGrams(v == null ? "" : String(v))}
+      />
+      <SlotChips label="Meal" value={slot} onChange={setSlot} />
       <NutrientTable n={preview} unit={unit} />
       {error && <p className="text-danger text-sm">{error}</p>}
       <div className="flex gap-2">
@@ -95,7 +90,7 @@ function EntryForm({
             onClose();
           }}
         >
-          Delete
+          <IconTrash width={16} height={16} /> Delete
         </Button>
         <Button className="flex-[2]" onClick={save} disabled={busy || !valid}>
           {busy ? "Saving…" : "Save"}

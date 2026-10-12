@@ -6,10 +6,10 @@ import "./globals.css";
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Fuel",
+  title: "kilo JOL",
   description: "Track food, kilojoules, macros and micronutrients.",
-  applicationName: "Fuel",
-  appleWebApp: { capable: true, title: "Fuel", statusBarStyle: "default" },
+  applicationName: "kilo JOL",
+  appleWebApp: { capable: true, title: "kilo JOL", statusBarStyle: "default" },
   formatDetection: { telephone: false },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };

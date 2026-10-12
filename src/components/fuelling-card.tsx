@@ -2,6 +2,7 @@
 
 import { activeWindow, fmtMin, type FuelItem } from "@/lib/fuelling";
 import { WORKOUT_LABELS, type Workout } from "@/lib/types";
+import { IconBolt, WORKOUT_ICONS } from "./icons";
 import { Card, cx } from "./ui";
 
 /** The day's workouts with fuelling guidance laid out on a timeline. */
@@ -21,15 +22,23 @@ export function FuellingCard({
   if (!sessions.length) return null;
   return (
     <Card className="p-4">
-      <h2 className="mb-1 font-semibold">Fuelling</h2>
-      <p className="text-muted mb-3 text-sm">
-        {sessions
-          .map(
-            (w) =>
-              `${w.title || WORKOUT_LABELS[w.type]}${w.start_time ? ` at ${fmtMin(Number(w.start_time.slice(0, 2)) * 60 + Number(w.start_time.slice(3, 5)))}` : ""}${w.duration_min ? ` · ${w.duration_min} min` : ""}${w.is_race ? " · race" : ""}`,
-          )
-          .join(" · ")}
-      </p>
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <span className="bg-accent-soft text-accent flex h-8 w-8 items-center justify-center rounded-full">
+          <IconBolt width={16} height={16} />
+        </span>
+        Fuelling
+      </h2>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {sessions.map((w) => {
+          const WIcon = WORKOUT_ICONS[w.type];
+          return (
+            <span key={w.id} className="bg-surface-2 text-muted flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs">
+              <WIcon width={14} height={14} />
+              {`${w.title || WORKOUT_LABELS[w.type]}${w.start_time ? ` · ${fmtMin(Number(w.start_time.slice(0, 2)) * 60 + Number(w.start_time.slice(3, 5)))}` : ""}${w.duration_min ? ` · ${w.duration_min} min` : ""}${w.is_race ? " · race" : ""}`}
+            </span>
+          );
+        })}
+      </div>
       <ol className="border-border relative space-y-3 border-l-2 pl-4">
         {items.map((i, n) => {
           const isActive = active === i;

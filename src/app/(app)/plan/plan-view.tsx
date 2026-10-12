@@ -4,9 +4,32 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/components/app-provider";
 import { FuellingCard } from "@/components/fuelling-card";
-import { IconPlus, IconTrash } from "@/components/icons";
 import { useToast } from "@/components/toast";
-import { Button, Card, Empty, Input, PageHeader, Select, Sheet, Spinner, cx } from "@/components/ui";
+import {
+  Button,
+  Card,
+  ChoiceCards,
+  Empty,
+  Input,
+  PageHeader,
+  Pills,
+  Segmented,
+  Sheet,
+  Spinner,
+  Stepper,
+  Toggle,
+  cx,
+} from "@/components/ui";
+import {
+  IconCalendar,
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconPlus,
+  IconTrash,
+  IconTrophy,
+  WORKOUT_ICONS,
+} from "@/components/icons";
 import { getDay } from "@/lib/data";
 import { addDays, friendlyDate, parseDate, today } from "@/lib/dates";
 import { fmtMin } from "@/lib/fuelling";
@@ -76,14 +99,14 @@ export function PlanView() {
       <div className="space-y-3 px-4">
         <div className="flex items-center justify-between text-sm">
           <button onClick={() => setStart(addDays(start, -7))} className="text-accent rounded-lg px-2 py-1">
-            ← Earlier
+            <IconChevronLeft width={18} height={18} className="inline" /> Earlier
           </button>
           <span className="text-muted">
             {parseDate(start).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} –{" "}
             {parseDate(addDays(start, 6)).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
           </span>
           <button onClick={() => setStart(addDays(start, 7))} className="text-accent rounded-lg px-2 py-1">
-            Later →
+            Later <IconChevronRight width={18} height={18} className="inline" />
           </button>
         </div>
 
@@ -121,23 +144,30 @@ export function PlanView() {
                     {p.workouts.length === 0 && <li className="text-muted text-xs">No sessions</li>}
                     {p.workouts.map((w) => (
                       <li key={w.id} className="flex items-center gap-2 py-1">
-                        <input
-                          type="checkbox"
-                          aria-label="Completed"
-                          className="h-5 w-5 accent-[var(--accent)]"
-                          checked={w.completed}
-                          onChange={async (e) => {
-                            await setWorkoutCompleted(w.id, e.target.checked);
+                        <button
+                          aria-label={w.completed ? "Mark not done" : "Mark done"}
+                          aria-pressed={w.completed}
+                          onClick={async () => {
+                            await setWorkoutCompleted(w.id, !w.completed);
                             load();
                           }}
-                        />
+                          className={cx(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                            w.completed ? "bg-accent text-accent-text" : "bg-surface-2 text-muted",
+                          )}
+                        >
+                          {(() => {
+                            const WIcon = w.completed ? IconCheck : WORKOUT_ICONS[w.type];
+                            return <WIcon width={16} height={16} />;
+                          })()}
+                        </button>
                         <button onClick={() => setEditing({ workout: w, date: w.date })} className="min-w-0 flex-1 text-left text-sm">
                           <span className={cx(w.completed && "text-muted line-through")}>{w.title || WORKOUT_LABELS[w.type]}</span>
                           <span className="text-muted text-xs">
                             {w.start_time ? ` · ${fmtMin(toMin(w.start_time))}` : ""}
                             {w.duration_min ? ` · ${w.duration_min} min` : ""} · {w.intensity}
                             {w.is_race ? " · race" : ""}
-                            {w.source === "calendar" ? " · 📅" : ""}
+                            {w.source === "calendar" && <IconCalendar width={12} height={12} className="ml-1 inline" />}
                           </span>
                         </button>
                       </li>
@@ -226,56 +256,51 @@ function WorkoutForm({ initial, date, onSaved }: { initial?: Workout; date: stri
         }
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Select
-          label="Type"
-          value={w.type}
-          onChange={(v) => set("type", v as WorkoutType)}
-          options={WORKOUT_TYPES.map((t) => ({ value: t, label: WORKOUT_LABELS[t] }))}
-        />
-        <Select
-          label="Intensity"
+      <ChoiceCards<WorkoutType>
+        label="Type"
+        columns={3}
+        value={w.type}
+        onChange={(v) => set("type", v)}
+        options={WORKOUT_TYPES.map((t) => ({ value: t, label: WORKOUT_LABELS[t], icon: WORKOUT_ICONS[t] }))}
+      />
+      {w.type !== "rest" && (
+        <Segmented<Intensity>
+          label="How hard?"
           value={w.intensity}
-          onChange={(v) => set("intensity", v as Intensity)}
+          onChange={(v) => set("intensity", v)}
           options={[
             { value: "easy", label: "Easy" },
             { value: "moderate", label: "Moderate" },
             { value: "hard", label: "Hard" },
           ]}
         />
-      </div>
-      <div className="grid grid-cols-3 gap-3">
+      )}
+      <div className="grid grid-cols-2 gap-3">
         <Input label="Date" type="date" value={w.date} onChange={(e) => set("date", e.target.value)} required />
-        <Input label="Start" type="time" value={w.start_time ?? ""} onChange={(e) => set("start_time", e.target.value || null)} />
-        <Input
-          label="Minutes"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={1440}
-          value={w.duration_min ?? ""}
-          onChange={(e) => set("duration_min", e.target.value ? Number(e.target.value) : null)}
-        />
+        <Input label="Start time" type="time" value={w.start_time ?? ""} onChange={(e) => set("start_time", e.target.value || null)} />
       </div>
+      {w.type !== "rest" && (
+        <div className="space-y-2">
+          <Pills
+            label="Duration (minutes)"
+            value={w.duration_min}
+            onChange={(v) => set("duration_min", v)}
+            options={[30, 45, 60, 90, 120] as const}
+          />
+          <Stepper value={w.duration_min} onChange={(v) => set("duration_min", v)} step={5} max={1440} start={60} unit="min" />
+        </div>
+      )}
       <Input label="Title (optional)" placeholder="e.g. City2Surf" value={w.title ?? ""} onChange={(e) => set("title", e.target.value)} />
-      <label className="flex items-center justify-between text-sm">
-        It&apos;s a race (carb-load the 2 days before)
-        <input
-          type="checkbox"
-          className="h-6 w-6 accent-[var(--accent)]"
+      <div className="border-border space-y-3 rounded-xl border p-3">
+        <Toggle
+          icon={IconTrophy}
+          label="It's a race"
+          hint="Carb-load for the 2 days before"
           checked={w.is_race}
-          onChange={(e) => set("is_race", e.target.checked)}
+          onChange={(v) => set("is_race", v)}
         />
-      </label>
-      <label className="flex items-center justify-between text-sm">
-        Completed
-        <input
-          type="checkbox"
-          className="h-6 w-6 accent-[var(--accent)]"
-          checked={w.completed}
-          onChange={(e) => set("completed", e.target.checked)}
-        />
-      </label>
+        <Toggle icon={IconCheck} label="Completed" checked={w.completed} onChange={(v) => set("completed", v)} />
+      </div>
       <div className="flex gap-2">
         {initial && (
           <Button

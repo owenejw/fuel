@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Fuel — nutrition tracker",
-    short_name: "Fuel",
+    name: "kilo JOL — nutrition tracker",
+    short_name: "kilo JOL",
     description: "Track food, kilojoules, macros and micronutrients.",
     start_url: "/",
     scope: "/",

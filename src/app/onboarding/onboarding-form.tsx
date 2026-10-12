@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
-import { Button, Input } from "@/components/ui";
+import { Button, Stepper } from "@/components/ui";
 import { saveProfile } from "@/server/actions/profile";
 import { saveWeight } from "@/server/actions/plan";
 import { today } from "@/lib/dates";
@@ -38,15 +38,16 @@ export function OnboardingForm() {
       <p className="text-muted mt-1 mb-6">A few details to calculate your targets. You can change these any time in Settings.</p>
       <form onSubmit={submit} className="space-y-4">
         <ProfileFields value={draft} onChange={setDraft} />
-        <Input
-          label="Current weight (kg)"
-          type="number"
-          inputMode="decimal"
-          step="0.1"
+        <Stepper
+          label="Current weight"
+          unit="kg"
+          step={0.5}
+          decimals={1}
           min={20}
           max={400}
-          value={weight}
-          onChange={(e) => setWeight(e.target.value)}
+          start={75}
+          value={weight === "" ? null : Number(weight)}
+          onChange={(v) => setWeight(v == null ? "" : String(v))}
         />
         {error && <p className="text-danger text-sm">{error}</p>}
         <Button type="submit" className="w-full" disabled={busy}>

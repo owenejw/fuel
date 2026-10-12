@@ -1,6 +1,6 @@
-# Fuel: a household nutrition tracker
+# kilo JOL: a household nutrition tracker
 
-Fuel is a mobile-first PWA for logging food, kilojoules, macros and micronutrients, with training-aware targets and workout fuelling. It's built for a few people sharing one household (Jez, Levi and Owen to start) and set up for Australia: kJ by default, AFCD data and Australian NRVs.
+kilo JOL is a mobile-first PWA for logging food, kilojoules, macros and micronutrients, with training-aware targets and workout fuelling. It's built for a few people sharing one household (Jez, Levi and Owen to start) and set up for Australia: kJ by default, AFCD data and Australian NRVs.
 
 There is **no sign-in**. Each device picks a profile once ("Who's this?"), and a long-lived cookie remembers it. Anyone can switch profile from Settings. Data isn't private between household members. An optional household passcode can keep strangers who find the URL out.
 
@@ -16,6 +16,7 @@ There is **no sign-in**. Each device picks a profile once ("Who's this?"), and a
 | **Plan** | Manual workouts, plus Google Calendar sync via the calendar's secret iCal address (keyword matching, recurring events). A fuelling timeline per workout: meal 2–3 h before, fast carbs 30–60 min before (hard sessions or > 60 min), carbs during sessions > 90 min, and protein + carbs within 2 h after. Race carb loading at 8 g/kg for the 2 days before. Grocery list. |
 | **Suggestions** | A rule-based engine over your own last 60 days of foods and saved meals (see below). It also suggests 1–2 never-logged AFCD foods that close a flagged micronutrient gap. |
 | **AI (optional, per profile)** | Claude suggestions, photo-of-plate logging (itemised estimate you edit before saving) and nutrition-panel reading for custom foods. Runs only on the server, and only when the profile turns it on. |
+| **Today** | Time-of-day greeting (a different one each day), logging streak and this week at a glance, energy ring with macro bars, one tip at a time, collapsible "what to eat next". Swipe a food left to delete it. |
 | **Other** | PWA: installable, offline copy of recent days and frequent foods. Web-push reminders for logging and pre-workout fuelling. CSV export of logs, weights and workouts. Dark mode. |
 
 Unknown nutrients are stored as absent, shown as **"no data"**, and never counted as zero. Totals that include foods missing a value show `*` and a note.
@@ -91,7 +92,7 @@ The AFCD import reads the **All solids & liquids per 100 g** sheet of the Releas
 
 ## Reminders (web push)
 
-On iPhone, add Fuel to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so either use Vercel Pro (`crons` in `vercel.ts`) or a free external scheduler such as cron-job.org or a GitHub Actions schedule.
+On iPhone, add kilo JOL to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so `.github/workflows/reminders.yml` does it from GitHub Actions instead: add the same `CRON_SECRET` as a repository secret (and optionally an `APP_URL` repository variable).
 
 ## Tests
 

@@ -1,0 +1,26 @@
+# Vercel Hobby crons only run once a day, so GitHub calls the reminders endpoint every 15 minutes instead.
+# Needs the repository secret CRON_SECRET (same value as in Vercel). Optional repository variable APP_URL.
+name: Reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send due reminders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://fuel-tau-one.vercel.app' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET isn't set; skipping."
+            exit 0
+          fi
+          curl -fsS --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/reminders"

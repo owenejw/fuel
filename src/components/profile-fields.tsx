@@ -1,22 +1,23 @@
 "use client";
 
-import { Input, Select } from "./ui";
+import { ChoiceCards, Input, Pills, Segmented, Stepper } from "./ui";
+import { ACTIVITY_ICONS, GOAL_ICONS, IconFemale, IconMale } from "./icons";
 import type { ActivityLevel, GoalType, Profile, Sex } from "@/lib/types";
 import type { EnergyUnit } from "@/lib/energy";
 
-export const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string }[] = [
-  { value: "sedentary", label: "Sedentary (desk job, little exercise)" },
-  { value: "light", label: "Light (exercise 1–3 days/week)" },
-  { value: "moderate", label: "Moderate (exercise 3–5 days/week)" },
-  { value: "very", label: "Very active (hard exercise 6–7 days/week)" },
-  { value: "extra", label: "Extra active (physical job + training)" },
+export const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string; hint: string }[] = [
+  { value: "sedentary", label: "Sedentary", hint: "Desk job, little exercise" },
+  { value: "light", label: "Lightly active", hint: "Exercise 1–3 days a week" },
+  { value: "moderate", label: "Moderately active", hint: "Exercise 3–5 days a week" },
+  { value: "very", label: "Very active", hint: "Hard exercise 6–7 days a week" },
+  { value: "extra", label: "Extra active", hint: "Physical job plus training" },
 ];
 
-export const GOAL_OPTIONS: { value: GoalType; label: string }[] = [
-  { value: "cut", label: "Cut — lose fat" },
-  { value: "maintain", label: "Maintain" },
-  { value: "recomp", label: "Recomp — lose fat, gain muscle" },
-  { value: "bulk", label: "Bulk — gain muscle" },
+export const GOAL_OPTIONS: { value: GoalType; label: string; hint: string }[] = [
+  { value: "cut", label: "Cut", hint: "Lose fat" },
+  { value: "maintain", label: "Maintain", hint: "Stay where you are" },
+  { value: "recomp", label: "Recomp", hint: "Lose fat, gain muscle" },
+  { value: "bulk", label: "Bulk", hint: "Gain muscle" },
 ];
 
 export type ProfileDraft = Pick<
@@ -27,52 +28,49 @@ export type ProfileDraft = Pick<
 export function ProfileFields({ value, onChange }: { value: ProfileDraft; onChange: (p: ProfileDraft) => void }) {
   const set = <K extends keyof ProfileDraft>(k: K, v: ProfileDraft[K]) => onChange({ ...value, [k]: v });
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Input label="Name" value={value.name} onChange={(e) => set("name", e.target.value)} autoComplete="given-name" />
+      <Segmented<Sex | null>
+        label="Sex (for energy and nutrient targets)"
+        value={value.sex}
+        onChange={(v) => set("sex", v)}
+        options={[
+          { value: "female", label: "Female", icon: IconFemale },
+          { value: "male", label: "Male", icon: IconMale },
+        ]}
+      />
       <div className="grid grid-cols-2 gap-3">
-        <Select
-          label="Sex"
-          value={value.sex ?? ""}
-          onChange={(v) => set("sex", (v || null) as Sex | null)}
-          options={[
-            { value: "", label: "Select…" },
-            { value: "female", label: "Female" },
-            { value: "male", label: "Male" },
-          ]}
-        />
         <Input
           label="Date of birth"
           type="date"
           value={value.birth_date ?? ""}
           onChange={(e) => set("birth_date", e.target.value || null)}
         />
+        <Stepper label="Height" unit="cm" min={50} max={272} start={170} value={value.height_cm} onChange={(v) => set("height_cm", v)} />
       </div>
-      <Input
-        label="Height (cm)"
-        type="number"
-        inputMode="decimal"
-        min={50}
-        max={272}
-        value={value.height_cm ?? ""}
-        onChange={(e) => set("height_cm", e.target.value ? Number(e.target.value) : null)}
+      <ChoiceCards
+        label="Goal"
+        columns={2}
+        value={value.goal}
+        onChange={(v) => set("goal", v)}
+        options={GOAL_OPTIONS.map((o) => ({ ...o, icon: GOAL_ICONS[o.value] }))}
       />
-      <Select
-        label="Activity level"
+      <ChoiceCards
+        label="Activity outside training"
         value={value.activity_level}
-        onChange={(v) => set("activity_level", v as ActivityLevel)}
-        options={ACTIVITY_OPTIONS}
+        onChange={(v) => set("activity_level", v)}
+        options={ACTIVITY_OPTIONS.map((o) => ({ ...o, icon: ACTIVITY_ICONS[o.value] }))}
       />
-      <Select
+      <Pills
         label="Training days per week"
-        value={String(value.training_days_per_week)}
-        onChange={(v) => set("training_days_per_week", Number(v))}
-        options={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
+        value={value.training_days_per_week}
+        onChange={(v) => set("training_days_per_week", v)}
+        options={[0, 1, 2, 3, 4, 5, 6, 7] as const}
       />
-      <Select label="Goal" value={value.goal} onChange={(v) => set("goal", v as GoalType)} options={GOAL_OPTIONS} />
-      <Select
-        label="Energy unit"
+      <Segmented<EnergyUnit>
+        label="Show energy in"
         value={value.energy_unit}
-        onChange={(v) => set("energy_unit", v as EnergyUnit)}
+        onChange={(v) => set("energy_unit", v)}
         options={[
           { value: "kj", label: "Kilojoules (kJ)" },
           { value: "kcal", label: "Calories (kcal)" },
