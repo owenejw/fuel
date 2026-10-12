@@ -104,7 +104,7 @@ export function PhotoLog() {
       />
       <div className="space-y-3 px-4">
         {!profile.ai_enabled && (
-          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on "Meal ideas & photo logging" in Settings to use this.</p>
+          <p className="bg-surface-2 text-muted rounded-xl p-3 text-sm">Turn on &ldquo;Meal ideas &amp; photo logging&rdquo; in Settings to use this.</p>
         )}
         <label className="border-border bg-surface block cursor-pointer overflow-hidden rounded-2xl border border-dashed text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
