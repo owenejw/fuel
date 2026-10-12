@@ -82,6 +82,30 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* Pages fade and rise in slightly when you navigate. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-in {
+  animation: page-in 0.22s ease-out;
+}
+
+/* No double-tap-to-zoom delay on anything tappable. */
+a,
+button,
+label,
+[role="button"],
+[role="radio"] {
+  touch-action: manipulation;
+}
+
 /* Bottom sheets: slide up over a blurred backdrop. */
 @keyframes sheet-in {
   from {
@@ -140,6 +164,7 @@ dialog.sheet.closing::backdrop {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .page-in,
   dialog.sheet[open],
   dialog.sheet.closing,
   dialog.sheet[open]::backdrop,

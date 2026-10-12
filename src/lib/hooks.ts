@@ -2,14 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { addEntries, deleteEntries, fetchLogRange, getDay, updateEntry, type NewEntry } from "./data";
-import { addDays, parseDate, today } from "./dates";
-import { sumNutrients, type Nutrients } from "./nutrients";
-import { getDayPlans } from "@/server/actions/plan";
+import { addDays, today } from "./dates";
+import { fetchWeek, type WeekDay } from "@/server/actions/summary";
 import { rankFrequentFoods, type FrequentFood } from "./frequent";
 import { cacheGet, cachePruneLogs, cacheSet } from "./offline";
-import type { DayTargets, LogEntry } from "./types";
+import type { LogEntry } from "./types";
 import type { DayBundle } from "@/server/repo";
 import { useApp } from "@/components/app-provider";
+
+function optimisticEntry(it: NewEntry, id: string): LogEntry {
+  return {
+    id,
+    date: it.date,
+    time: it.time ?? "00:00:00",
+    slot: it.slot,
+    kind: it.kind,
+    reference_food_id: it.kind === "reference" ? (it.food_id ?? null) : null,
+    custom_food_id: it.kind === "custom" ? (it.food_id ?? null) : null,
+    recipe_id: it.kind === "recipe" ? (it.food_id ?? null) : null,
+    name: it.name,
+    grams: it.grams,
+    nutrients: it.nutrients,
+  } as LogEntry;
+}
 
 /** Everything Today needs for one date, with an offline copy and optimistic updates. */
 export function useDay(date: string) {
@@ -56,11 +71,20 @@ export function useDay(date: string) {
 
   const setEntries = useCallback((fn: (e: LogEntry[]) => LogEntry[]) => setDay((d) => ({ ...d, entries: fn(d.entries) })), [setDay]);
 
+  // Optimistic: show new entries straight away with temporary ids, then swap in the saved rows.
   const add = useCallback(
     async (items: NewEntry[]) => {
-      const saved = await addEntries(items);
-      setEntries((cur) => [...cur, ...saved.filter((e) => e.date === date)]);
-      return saved;
+      const tmp = items.map((it, i) => optimisticEntry(it, `tmp-${Date.now()}-${i}`));
+      const tmpIds = new Set(tmp.map((e) => e.id));
+      setEntries((cur) => [...cur, ...tmp.filter((e) => e.date === date)]);
+      try {
+        const saved = await addEntries(items);
+        setEntries((cur) => [...cur.filter((e) => !tmpIds.has(e.id)), ...saved.filter((e) => e.date === date)]);
+        return saved;
+      } catch (err) {
+        setEntries((cur) => cur.filter((e) => !tmpIds.has(e.id)));
+        throw err;
+      }
     },
     [date, setEntries],
   );
@@ -82,11 +106,18 @@ export function useDay(date: string) {
 
   const update = useCallback(
     async (id: string, patch: Parameters<typeof updateEntry>[1]) => {
-      const saved = await updateEntry(id, patch);
-      setEntries((cur) => cur.map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
-      return saved;
+      const prev = day?.entries ?? [];
+      setEntries((cur) => cur.map((e) => (e.id === id ? { ...e, ...patch } : e)).filter((e) => e.date === date));
+      try {
+        const saved = await updateEntry(id, patch);
+        setEntries((cur) => cur.map((e) => (e.id === id ? saved : e)).filter((e) => e.date === date));
+        return saved;
+      } catch (err) {
+        setEntries(() => prev);
+        throw err;
+      }
     },
-    [date, setEntries],
+    [date, day, setEntries],
   );
 
   return { day, entries: day?.entries ?? null, loading: day === null, offline, refresh, add, remove, update, setDay };
@@ -113,36 +144,21 @@ export function useFrequentFoods() {
   return { foods, refresh };
 }
 
-export type WeekDay = { date: string; totals: Nutrients; targets: DayTargets; logged: boolean; training: boolean };
+export type { WeekDay } from "@/server/actions/summary";
 
 /** Monday-to-Sunday totals against each day's targets, for the week strip and trend tiles. */
 export function useWeek(date: string, version = 0) {
-  const monday = addDays(date, -((parseDate(date).getDay() + 6) % 7));
-  const sunday = addDays(monday, 6);
-  const key = `${monday}:${version}`;
+  const key = `${date}:${version}`;
   const [state, setState] = useState<{ key: string; days: WeekDay[] | null }>({ key, days: null });
   useEffect(() => {
     let live = true;
-    Promise.all([fetchLogRange(monday, sunday), getDayPlans(monday, sunday)]).then(
-      ([entries, plans]) => {
-        if (!live) return;
-        const days = plans.map((p) => {
-          const mine = entries.filter((e) => e.date === p.date);
-          return {
-            date: p.date,
-            totals: sumNutrients(mine.map((e) => e.nutrients)).totals,
-            targets: p.targets,
-            logged: mine.length > 0,
-            training: p.training,
-          };
-        });
-        setState({ key, days });
-      },
+    fetchWeek(date).then(
+      (days) => live && setState({ key, days }),
       () => live && setState({ key, days: [] }),
     );
     return () => {
       live = false;
     };
-  }, [key, monday, sunday]);
+  }, [key, date]);
   return state.key === key ? state.days : null;
 }

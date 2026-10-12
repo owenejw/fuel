@@ -4,56 +4,50 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { today } from "@/lib/dates";
 import type { WeekDay } from "@/lib/hooks";
+import { toUnit, unitLabel, type EnergyUnit } from "@/lib/energy";
+import type { Nutrients } from "@/lib/nutrients";
+import type { DayTargets } from "@/lib/types";
 import { useApp } from "./app-provider";
-import { IconChevronRight } from "./icons";
+import { IconCarbs, IconChevronRight, IconEnergy, IconFat, IconFibre, IconProtein } from "./icons";
 import { METRIC, Rings } from "./rings";
 import { cx } from "./ui";
 
 const LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
-/** Mini rings for Monday–Sunday. Tapping a day calls `onPick` (or links to its details). */
+/** Monday–Sunday day picker: date, plus a dot if anything was logged. */
 export function WeekStrip({ days, selected, href }: { days: WeekDay[] | null; selected: string; href: (date: string) => string }) {
   return (
     <div className="grid grid-cols-7 gap-1">
       {Array.from({ length: 7 }, (_, i) => {
         const d = days?.[i];
         const isSel = d?.date === selected;
-        const future = d ? d.date > today() : false;
+        const future = d ? d.date > today() : true;
         const body = (
           <>
+            <span className="text-muted text-[11px] font-semibold">{LETTERS[i]}</span>
             <span
               className={cx(
-                "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
-                isSel ? "bg-energy text-white" : "text-muted",
+                "tabular flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-semibold",
+                isSel ? "bg-accent text-accent-text" : future ? "text-muted/50" : "bg-surface",
               )}
             >
-              {LETTERS[i]}
+              {d ? Number(d.date.slice(8)) : ""}
             </span>
-            <span className={cx(future && "opacity-40")}>
-              <Rings
-                size={38}
-                stroke={4.5}
-                gap={1}
-                rings={[
-                  { ...METRIC.energy, value: d?.totals.energy_kj ?? 0, target: d?.targets.energy_kj ?? 1 },
-                  { ...METRIC.protein, value: d?.totals.protein_g ?? 0, target: d?.targets.protein_g ?? 1 },
-                  { ...METRIC.carbs, value: d?.totals.carbs_g ?? 0, target: d?.targets.carbs_g ?? 1 },
-                ]}
-              />
-            </span>
+            <span className={cx("h-1.5 w-1.5 rounded-full", d?.logged ? "bg-accent" : "bg-transparent")} />
           </>
         );
         return d && !future ? (
           <Link
             key={i}
             href={href(d.date)}
-            className="flex flex-col items-center gap-1.5 rounded-xl py-1 active:bg-white/5"
+            replace
+            className="flex flex-col items-center gap-1 rounded-xl py-1 active:opacity-60"
             aria-label={d.date}
           >
             {body}
           </Link>
         ) : (
-          <div key={i} className="flex flex-col items-center gap-1.5 py-1">
+          <div key={i} className="flex flex-col items-center gap-1 py-1">
             {body}
           </div>
         );
@@ -203,5 +197,79 @@ export function MiniBars({
         </div>
       )}
     </div>
+  );
+}
+
+const BAR_ROWS = [
+  { metric: "protein", key: "protein_g", Icon: IconProtein, overOk: true },
+  { metric: "carbs", key: "carbs_g", Icon: IconCarbs, overOk: false },
+  { metric: "fat", key: "fat_g", Icon: IconFat, overOk: false },
+  { metric: "fibre", key: "fibre_g", Icon: IconFibre, overOk: true },
+] as const;
+
+/** One kJ ring with the macros as bars beside it: what you're at, and what's left. */
+export function EnergyCard({
+  totals,
+  targets,
+  unit,
+  footer,
+  size = 132,
+}: {
+  totals: Nutrients;
+  targets: DayTargets;
+  unit: EnergyUnit;
+  footer?: ReactNode;
+  size?: number;
+}) {
+  const eaten = totals.energy_kj ?? 0;
+  const left = targets.energy_kj - eaten;
+  return (
+    <>
+      <div className="flex items-center gap-4">
+        <div className="relative shrink-0">
+          <Rings size={size} stroke={13} rings={[{ ...METRIC.energy, value: eaten, target: targets.energy_kj }]} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <IconEnergy width={16} height={16} style={{ color: METRIC.energy.color }} />
+            <div className="tabular text-[26px] leading-tight font-bold tracking-tight">
+              {Math.round(Math.abs(toUnit(left, unit))).toLocaleString("en-AU")}
+            </div>
+            <div className="text-muted text-xs">
+              {unitLabel(unit)} {left >= 0 ? "left" : "over"}
+            </div>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1 space-y-2.5">
+          {BAR_ROWS.map((r) => {
+            const m = METRIC[r.metric];
+            const v = totals[r.key] ?? 0;
+            const t = targets[r.key];
+            const diff = Math.round(t - v);
+            const pct = t > 0 ? Math.min(100, (v / t) * 100) : 0;
+            return (
+              <div key={r.key}>
+                <div className="flex items-baseline gap-1.5 text-[13px]">
+                  <r.Icon width={13} height={13} className="self-center" style={{ color: m.color }} />
+                  <span className="flex-1">{m.label}</span>
+                  <span className="tabular font-semibold" style={{ color: m.color }}>
+                    {Math.round(v)}
+                    <span className="text-muted font-normal">/{Math.round(t)} g</span>
+                  </span>
+                </div>
+                <div
+                  className="mt-1 h-1.5 overflow-hidden rounded-full"
+                  style={{ background: `color-mix(in srgb, ${m.color} 18%, transparent)` }}
+                >
+                  <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: m.color }} />
+                </div>
+                <div className={cx("tabular mt-0.5 text-right text-[11px]", diff < 0 && !r.overOk ? "text-danger" : "text-muted")}>
+                  {diff >= 0 ? `${diff} g left` : `${-diff} g over`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {footer && <div className="text-muted mt-3 flex items-center justify-between gap-2 text-xs">{footer}</div>}
+    </>
   );
 }

@@ -54,10 +54,10 @@ export function DiaryView() {
     });
   }
 
-  const undoAction = (added: LogEntry[]) => ({
+  const undoAction = (saving: Promise<LogEntry[]>) => ({
     label: "Undo",
     onClick: () => {
-      remove(added.map((x) => x.id)).catch(() => toast("Could not undo"));
+      saving.then((added) => remove(added.map((x) => x.id))).catch(() => toast("Could not undo"));
     },
   });
 
@@ -150,13 +150,15 @@ export function DiaryView() {
         unit={unit}
         entry={quick?.entry}
         onSave={async (e) => {
-          if (quick?.entry) {
-            await update(quick.entry.id, { name: e.name, slot: e.slot, nutrients: e.nutrients });
-          } else {
-            const added = await add([e]);
-            toast(`Added ${e.name} to ${SLOT_LABELS[e.slot]} · ${friendlyDate(e.date)}`, undoAction(added));
-          }
+          const editing = quick?.entry;
           setQuick(null);
+          if (editing) {
+            update(editing.id, { name: e.name, slot: e.slot, nutrients: e.nutrients }).catch(() => toast("Couldn't save — try again"));
+          } else {
+            const saving = add([e]);
+            toast(`Added ${e.name} to ${SLOT_LABELS[e.slot]} · ${friendlyDate(e.date)}`, undoAction(saving));
+            saving.catch(() => toast(`Couldn't add ${e.name} — try again`));
+          }
         }}
       />
 

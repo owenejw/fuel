@@ -47,12 +47,16 @@ export function SettingsView() {
   const toast = useToast();
 
   /** Save a partial change to the profile. */
+  /** Optimistic: switches and choices change on screen immediately, then save. */
   const save = async (patch: Partial<Profile>) => {
+    const before = profile;
+    setProfile({ ...profile, ...patch });
     try {
       const next = await saveProfile({ ...profile, ...patch });
       setProfile(next);
       return next;
     } catch (err) {
+      setProfile(before);
       toast(err instanceof Error ? err.message : "Could not save");
       throw err;
     }

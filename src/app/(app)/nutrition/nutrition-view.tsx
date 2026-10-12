@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { IconChevronDown, IconChevronLeft, IconDumbbell, IconRest, IconSparkles } from "@/components/icons";
-import { METRIC, Rings, type MetricKey } from "@/components/rings";
-import { BigStat, MiniBars, WeekStrip } from "@/components/summary";
+import { METRIC, type MetricKey } from "@/components/rings";
+import { BigStat, EnergyCard, MiniBars, WeekStrip } from "@/components/summary";
 import { ChoiceCards, Sheet, Spinner, cx } from "@/components/ui";
 import { setDayType } from "@/lib/data";
 import { friendlyDate, isValidDate, parseDate, today } from "@/lib/dates";
@@ -75,16 +75,9 @@ export function NutritionView() {
       ) : (
         <div className="px-4 pb-6">
           <div className="flex flex-col items-center pt-4 pb-2">
-            <Rings
-              size={250}
-              stroke={30}
-              gap={3}
-              rings={[
-                { ...METRIC.energy, value: totals.energy_kj ?? 0, target: day.plan.targets.energy_kj },
-                { ...METRIC.protein, value: totals.protein_g ?? 0, target: day.plan.targets.protein_g },
-                { ...METRIC.carbs, value: totals.carbs_g ?? 0, target: day.plan.targets.carbs_g },
-              ]}
-            />
+            <div className="bg-surface w-full rounded-3xl p-4">
+              <EnergyCard totals={totals} targets={day.plan.targets} unit={unit} size={140} />
+            </div>
             <button
               onClick={() => setDayTypeOpen(true)}
               className={cx(
