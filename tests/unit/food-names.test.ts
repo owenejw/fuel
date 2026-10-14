@@ -14,7 +14,10 @@ describe("prettyName", () => {
   });
 
   it("tidies USDA all-caps names", () => {
-    expect(prettyName("Cereals ready-to-eat, GENERAL MILLS, CHEERIOS")).toMatchObject({ title: "Cheerios", detail: "General Mills · Cereals ready-to-eat" });
+    expect(prettyName("Cereals ready-to-eat, GENERAL MILLS, CHEERIOS")).toMatchObject({
+      title: "Cheerios",
+      detail: "General Mills · Cereals ready-to-eat",
+    });
   });
 
   it("leaves simple and branded names readable", () => {
