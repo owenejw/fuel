@@ -1,11 +1,13 @@
 "use client";
 
+import { useConfirm } from "@/components/confirm";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import { IconChevronLeft, IconSearch, IconTrash } from "@/components/icons";
+import { IconSearch, IconTrash } from "@/components/icons";
 import { MacroLine, NutrientTable } from "@/components/nutrition";
-import { Button, Card, Input, PageHeader, Spinner } from "@/components/ui";
+import { BackButton, Stepper, Button, Card, Input, PageHeader, Spinner } from "@/components/ui";
 import { deleteRecipe, fetchRecipes, saveRecipe, searchFoods } from "@/lib/data";
 import { nutrientsFor, SOURCE_LABELS } from "@/lib/foods/shared";
 import { scaleNutrients, sumNutrients } from "@/lib/nutrients";
@@ -14,6 +16,7 @@ import type { Food, SavedMealItem } from "@/lib/types";
 /** Build a recipe from ingredients; nutrition is calculated per serve. */
 export function RecipeBuilder() {
   const router = useRouter();
+  const confirm = useConfirm();
   const params = useSearchParams();
   const { unit } = useApp();
   const editId = params.get("id");
@@ -103,27 +106,22 @@ export function RecipeBuilder() {
 
   return (
     <>
-      <PageHeader
-        left={
-          <button onClick={() => router.back()} className="-ml-2 rounded-full p-2" aria-label="Back">
-            <IconChevronLeft />
-          </button>
-        }
-        title={editId ? "Edit recipe" : "New recipe"}
-      />
+      <PageHeader left={<BackButton onClick={() => router.back()} />} title={editId ? "Edit recipe" : "New recipe"} />
       <div className="space-y-3 px-4">
-        <div className="grid grid-cols-[1fr_6rem] gap-3">
-          <Input label="Recipe name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <Input
-            label="Serves"
-            type="number"
-            inputMode="decimal"
-            min={0.5}
-            step={0.5}
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
-          />
-        </div>
+        <Input label="Recipe name" placeholder="e.g. Chicken stir-fry" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Stepper
+          label="Makes how many serves?"
+          value={servings === "" ? null : Number(servings)}
+          onChange={(v) => setServings(v == null ? "" : String(v))}
+          step={1}
+          min={1}
+          max={50}
+          unit="serves"
+        />
+        <p className="text-muted text-xs">
+          Add every ingredient for the whole batch. When you log it, one serve is the batch divided by this number. Recipes are shared with
+          the household.
+        </p>
 
         <Card>
           <label className="border-border flex h-12 items-center gap-2 border-b px-3">
@@ -201,7 +199,15 @@ export function RecipeBuilder() {
             variant="secondary"
             className="text-danger w-full"
             onClick={async () => {
-              if (!confirm("Delete this recipe? Past log entries keep their values.")) return;
+              if (
+                !(await confirm({
+                  title: "Delete this recipe?",
+                  message: "It's removed for everyone in the household. Past log entries keep their values.",
+                  confirm: "Delete",
+                  danger: true,
+                }))
+              )
+                return;
               await deleteRecipe(editId);
               router.replace("/log");
             }}

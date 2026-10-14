@@ -3,24 +3,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { useApp } from "@/components/app-provider";
-import { IconChevronLeft, IconChevronRight, IconTrash } from "@/components/icons";
+import { IconTrash } from "@/components/icons";
 import { useToast } from "@/components/toast";
-import { Button, Card, Empty, Input, PageHeader, Spinner, cx } from "@/components/ui";
+import { Button, Card, Empty, Heading, Input, PageHeader, PageSkeleton, cx } from "@/components/ui";
 import { addDays, friendlyDate, parseDate, today } from "@/lib/dates";
 import { formatEnergy, toUnit, unitLabel, type EnergyUnit } from "@/lib/energy";
-import { formatAmount, nutrientDef } from "@/lib/nutrients";
+import { nutrientDef } from "@/lib/nutrients";
 import { WORKOUT_LABELS } from "@/lib/types";
 import { deleteWeight, fetchWeights, getGoalContext, saveGoal, saveWeight } from "@/server/actions/plan";
 import { getTrends, type Trends } from "@/server/actions/trends";
 import { cacheGet, cacheSet } from "@/lib/offline";
+import { WeekNav, mondayOf } from "@/components/week";
+import { METRIC } from "@/components/rings";
+import { BigStat, ChevronBadge } from "@/components/summary";
+import Link from "next/link";
 
-type Tab = "week" | "micros" | "weight" | "summary";
+type Tab = "week" | "weight" | "summary";
 
 const dayLabel = (d: string) => parseDate(d).toLocaleDateString("en-AU", { weekday: "short" });
 
 export function TrendsView() {
   const { unit, profileId } = useApp();
-  const [end, setEnd] = useState(today());
+  const [weekStart, setWeekStart] = useState(() => mondayOf(today()));
+  const end = addDays(weekStart, 6);
   const [tab, setTab] = useState<Tab>("week");
   // Show the last copy for this week straight away, then refresh it.
   const [cached, setCached] = useState<{ end: string; data: Trends | null }>(() => ({
@@ -44,55 +49,35 @@ export function TrendsView() {
 
   return (
     <>
-      <PageHeader
-        title="Trends"
-        right={
-          <div className="flex items-center text-sm">
-            <button onClick={() => setEnd(addDays(end, -7))} className="rounded-full p-2" aria-label="Previous week">
-              <IconChevronLeft width={20} height={20} />
-            </button>
-            <span className="tabular">
-              {parseDate(addDays(end, -6)).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}–
-              {parseDate(end).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
-            </span>
-            <button
-              onClick={() => setEnd(addDays(end, 7) > today() ? today() : addDays(end, 7))}
-              disabled={end >= today()}
-              className="rounded-full p-2 disabled:opacity-30"
-              aria-label="Next week"
-            >
-              <IconChevronRight width={20} height={20} />
-            </button>
-          </div>
-        }
-      />
+      <PageHeader title="Trends" />
       <div className="space-y-3 px-4">
-        <div className="bg-surface-2 flex rounded-xl p-1">
+        <WeekNav weekStart={weekStart} onChange={setWeekStart} maxAhead={0} />
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
           {(
             [
               ["week", "Week"],
-              ["micros", "Micros"],
               ["weight", "Weight"],
               ["summary", "Summary"],
             ] as [Tab, string][]
           ).map(([t, label]) => (
             <button
               key={t}
+              role="tab"
+              aria-selected={tab === t}
               onClick={() => setTab(t)}
-              className={cx("h-9 flex-1 rounded-lg text-sm", tab === t && "bg-surface font-medium shadow-sm")}
+              className={cx(
+                "h-10 shrink-0 rounded-full px-5 text-sm font-semibold transition active:scale-95",
+                tab === t ? "bg-text text-bg" : "bg-surface text-text",
+              )}
             >
               {label}
             </button>
           ))}
         </div>
         {!data ? (
-          <div className="text-muted flex justify-center py-10">
-            <Spinner />
-          </div>
+          <PageSkeleton cards={[220, 200, 200]} />
         ) : tab === "week" ? (
           <WeekTab data={data} unit={unit} />
-        ) : tab === "micros" ? (
-          <MicrosTab data={data} />
         ) : tab === "weight" ? (
           <WeightTab data={data} unit={unit} onChange={load} />
         ) : (
@@ -135,7 +120,9 @@ function DailyChart({
   }));
   return (
     <div>
-      <div className="mb-1 text-sm font-medium">{label}</div>
+      <div className="mb-2 text-[17px] font-semibold" style={{ color }}>
+        {label}
+      </div>
       <div className="h-40">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
@@ -169,122 +156,63 @@ function DailyChart({
   );
 }
 
+const WEEK_METRICS = [
+  { key: "energy_kj", metric: "energy", label: "Energy" },
+  { key: "protein_g", metric: "protein", label: "Protein" },
+  { key: "carbs_g", metric: "carbs", label: "Carbs" },
+  { key: "fat_g", metric: "fat", label: "Fat" },
+  { key: "fibre_g", metric: "fibre", label: "Fibre" },
+] as const;
+
 function WeekTab({ data, unit }: { data: Trends; unit: EnergyUnit }) {
   const a = data.averages;
   const fmtE = (v: number) => Math.round(toUnit(v, unit)).toLocaleString("en-AU");
-  const rows: { label: string; key: keyof Trends["averages"]["intake"]; fmt: (v: number) => string }[] = [
-    { label: `Energy (${unitLabel(unit)})`, key: "energy_kj", fmt: fmtE },
-    { label: "Protein (g)", key: "protein_g", fmt: (v) => String(Math.round(v)) },
-    { label: "Carbs (g)", key: "carbs_g", fmt: (v) => String(Math.round(v)) },
-    { label: "Fat (g)", key: "fat_g", fmt: (v) => String(Math.round(v)) },
-    { label: "Fibre (g)", key: "fibre_g", fmt: (v) => String(Math.round(v)) },
-  ];
+  const fmt = (k: string, v: number) => (k === "energy_kj" ? fmtE(v) : String(Math.round(v)));
   return (
     <>
-      <Card className="p-4">
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="font-semibold">Weekly averages</h2>
-          <span className="text-muted text-xs">{a.daysLogged} of 7 days logged</span>
-        </div>
-        <table className="tabular w-full text-sm">
-          <thead>
-            <tr className="text-muted text-left text-xs">
-              <th className="py-1 font-normal"></th>
-              <th className="py-1 text-right font-normal">Avg intake</th>
-              <th className="py-1 text-right font-normal">Avg target</th>
-              <th className="py-1 text-right font-normal">%</th>
-            </tr>
-          </thead>
-          <tbody className="divide-border divide-y">
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td className="py-1.5">{r.label}</td>
-                <td className="py-1.5 text-right">{a.daysLogged ? r.fmt(a.intake[r.key]) : "no data"}</td>
-                <td className="py-1.5 text-right">{r.fmt(a.targets[r.key])}</td>
-                <td className="text-muted py-1.5 text-right">
-                  {a.daysLogged && a.targets[r.key] ? `${Math.round((a.intake[r.key] / a.targets[r.key]) * 100)}%` : "–"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {data.week.some((d) => d.incomplete) && (
-          <p className="text-muted mt-2 text-xs">Some days include foods with no data for a macro, so totals may be low.</p>
-        )}
-      </Card>
-      <Card className="space-y-4 p-4">
-        <p className="text-muted text-xs">Bars show what you ate; the dashed line is that day&apos;s target.</p>
-        <DailyChart data={data.week} valueKey="energy_kj" label={`Energy (${unitLabel(unit)})`} color="var(--energy)" format={fmtE} />
-        <DailyChart
-          data={data.week}
-          valueKey="protein_g"
-          label="Protein (g)"
-          color="var(--protein)"
-          format={(v) => String(Math.round(v))}
-        />
-        <DailyChart data={data.week} valueKey="carbs_g" label="Carbs (g)" color="var(--carbs)" format={(v) => String(Math.round(v))} />
-        <DailyChart data={data.week} valueKey="fat_g" label="Fat (g)" color="var(--fat)" format={(v) => String(Math.round(v))} />
-      </Card>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Micros
-// ---------------------------------------------------------------------------
-
-function MicrosTab({ data }: { data: Trends }) {
-  const micros = [...data.micros].sort((a, b) => Number(b.flagged) - Number(a.flagged) || Number(b.over) - Number(a.over));
-  if (!data.averages.daysLogged) return <Empty>Log some food this week to see micronutrients.</Empty>;
-  return (
-    <Card className="p-4">
-      <p className="text-muted mb-3 text-xs">
-        Today and 7-day average against Australian NRVs for your age and sex. Totals only count foods that have data for that nutrient, so
-        they can read low.
-      </p>
-      <ul className="space-y-3">
-        {micros.map((m) => {
-          const def = nutrientDef(m.key);
-          const pct = (v: number | null) => (v == null ? 0 : Math.min(100, (v / m.target) * 100));
+      <Heading right={<span className="text-muted text-sm">{a.daysLogged} of 7 days logged</span>}>Daily average</Heading>
+      <div className="grid grid-cols-2 gap-3">
+        {WEEK_METRICS.map((m) => {
+          const pct = a.daysLogged && a.targets[m.key] ? Math.round((a.intake[m.key] / a.targets[m.key]) * 100) : null;
           return (
-            <li key={m.key}>
-              <div className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="font-medium">
-                  {def.label}
-                  {m.flagged && (
-                    <span className="bg-warn/15 text-warn ml-2 rounded-full px-2 py-0.5 text-xs font-normal">⚠ Under 70% this week</span>
-                  )}
-                  {m.over && (
-                    <span className="bg-danger/15 text-danger ml-2 rounded-full px-2 py-0.5 text-xs font-normal">▲ Over limit</span>
-                  )}
-                </span>
-                <span className="tabular text-muted text-xs">
-                  {m.limit ? "limit" : m.basis === "AI" ? "target" : m.basis} {formatAmount(m.target, m.key)}
-                </span>
-              </div>
-              <div className="mt-1 grid grid-cols-[3.5rem_1fr_4.5rem] items-center gap-2 text-xs">
-                <span className="text-muted">Today</span>
-                <div className="bg-surface-2 h-1.5 overflow-hidden rounded-full">
-                  <div className="bg-accent h-full rounded-full" style={{ width: `${pct(m.today)}%` }} />
-                </div>
-                <span className="tabular text-right">
-                  {m.today == null ? "no data" : `${Math.round((m.today / m.target) * 100)}%`}
-                  {m.todayIncomplete && <span className="text-warn">*</span>}
-                </span>
-                <span className="text-muted">7-day</span>
-                <div className="bg-surface-2 h-1.5 overflow-hidden rounded-full">
-                  <div
-                    className={cx("h-full rounded-full", m.flagged ? "bg-warn" : m.over ? "bg-danger" : "bg-accent")}
-                    style={{ width: `${pct(m.average)}%` }}
-                  />
-                </div>
-                <span className="tabular text-right">{m.average == null ? "no data" : `${Math.round((m.average / m.target) * 100)}%`}</span>
-              </div>
-            </li>
+            <div key={m.key} className={cx("bg-surface rounded-3xl p-4", m.key === "energy_kj" && "col-span-2")}>
+              <BigStat
+                label={m.label}
+                value={a.daysLogged ? fmt(m.key, a.intake[m.key]) : "–"}
+                target={fmt(m.key, a.targets[m.key])}
+                unit={m.key === "energy_kj" ? unitLabel(unit) : "g"}
+                color={METRIC[m.metric].color}
+                size={m.key === "energy_kj" ? "lg" : "md"}
+              />
+              <div className="text-muted mt-1 text-xs">{pct == null ? "No days logged" : `${pct}% of target`}</div>
+            </div>
           );
         })}
-      </ul>
-    </Card>
+      </div>
+      {data.week.some((d) => d.incomplete) && (
+        <p className="text-muted text-xs">Some days include foods with no data for a macro, so averages may read low.</p>
+      )}
+      <Link href="/micros" className="bg-surface flex items-center gap-3 rounded-3xl p-4 active:scale-[0.98]">
+        <span className="flex-1">
+          <span className="block font-semibold">Vitamins &amp; minerals</span>
+          <span className="text-muted block text-sm">This week against your targets</span>
+        </span>
+        <ChevronBadge />
+      </Link>
+      <Heading>Day by day</Heading>
+      <p className="text-muted -mt-1 text-xs">Bars are what you ate; the dash is that day&apos;s target.</p>
+      {WEEK_METRICS.filter((m) => m.key !== "fibre_g").map((m) => (
+        <div key={m.key} className="bg-surface rounded-3xl p-4">
+          <DailyChart
+            data={data.week}
+            valueKey={m.key as "energy_kj" | "protein_g" | "carbs_g" | "fat_g"}
+            label={m.key === "energy_kj" ? `Energy (${unitLabel(unit)})` : `${m.label} (g)`}
+            color={METRIC[m.metric].color}
+            format={(v) => fmt(m.key, v)}
+          />
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -370,7 +298,8 @@ function WeightTab({ data, unit, onChange }: { data: Trends; unit: EnergyUnit; o
                     axisLine={false}
                     tick={{ fill: "var(--muted)", fontSize: 11 }}
                     width={44}
-                    tickFormatter={(v) => Number(v).toFixed(0)}
+                    tickFormatter={(v) => (Number.isInteger(Number(v)) ? String(v) : Number(v).toFixed(1))}
+                    allowDecimals
                   />
                   <Tooltip
                     {...tooltipStyle}

@@ -41,3 +41,22 @@ export function cachePruneLogs(userId: string, keepFrom: string) {
     // ignore
   }
 }
+
+/**
+ * A request failed. If we're genuinely offline, say so. If we're online, the usual cause is that a new version
+ * went live while this page was open (its server functions no longer exist), so reload once to pick it up.
+ * Returns true when the caller should show the offline message.
+ */
+export function handleRequestFailure(): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  try {
+    const last = Number(sessionStorage.getItem("kj:reloaded-at") ?? 0);
+    if (Date.now() - last > 60_000) {
+      sessionStorage.setItem("kj:reloaded-at", String(Date.now()));
+      window.location.reload();
+    }
+  } catch {
+    // Storage unavailable: don't risk a reload loop.
+  }
+  return false;
+}

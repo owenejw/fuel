@@ -4,11 +4,11 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import { IconChevronLeft, IconMic, IconTrash } from "@/components/icons";
+import { IconMic, IconTrash } from "@/components/icons";
 import { MacroLine } from "@/components/nutrition";
 import { SlotChips } from "@/components/slot-chips";
 import { useToast } from "@/components/toast";
-import { Button, Card, Input, PageHeader, Spinner, cx } from "@/components/ui";
+import { BackButton, Button, Card, Input, PageHeader, Spinner, cx } from "@/components/ui";
 import { addEntries } from "@/lib/data";
 import { isValidDate, today } from "@/lib/dates";
 import { formatEnergy, fromUnit, toUnit, unitLabel } from "@/lib/energy";
@@ -147,11 +147,7 @@ export function PhotoLog({ mode = "photo" }: { mode?: "photo" | "text" }) {
   return (
     <>
       <PageHeader
-        left={
-          <button onClick={() => router.back()} className="-ml-2 rounded-full p-2" aria-label="Back">
-            <IconChevronLeft />
-          </button>
-        }
+        left={<BackButton onClick={() => router.back()} />}
         title={mode === "photo" ? "Log from a photo" : "Describe what you ate"}
       />
       <div className="space-y-3 px-4">

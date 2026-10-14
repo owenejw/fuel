@@ -8,6 +8,8 @@ import type { NewEntry } from "@/lib/data";
 import type { EnergyUnit } from "@/lib/energy";
 import { SLOT_LABELS, type Food, type MealSlot } from "@/lib/types";
 import { SlotChips } from "./slot-chips";
+import { IconBarcode, IconStar } from "./icons";
+import { prettyName } from "@/lib/food-names";
 import { NutrientTable } from "./nutrition";
 import { Button, Sheet, cx } from "./ui";
 
@@ -22,7 +24,17 @@ export function FoodSheet({
   onAdd,
   submitLabel = "Add",
   notice,
+  favourite,
+  onToggleFavourite,
+  onAddAndNext,
+  nextLabel = "Add & scan another",
 }: {
+  /** Star state; when given, a ☆ button appears in the title. */
+  favourite?: boolean;
+  onToggleFavourite?: () => void;
+  /** A second button, e.g. after a barcode scan: add, then scan the next product. */
+  onAddAndNext?: (entry: NewEntry) => Promise<void>;
+  nextLabel?: string;
   /** Shown at the top, e.g. "Saved — not logged yet". */
   notice?: React.ReactNode;
   food: Food | null;
@@ -40,11 +52,29 @@ export function FoodSheet({
       onClose={onClose}
       title={
         food && (
-          <div>
-            <div className="truncate">{food.name}</div>
-            <div className="text-muted truncate text-xs font-normal">
-              {[food.brand, SOURCE_LABELS[food.source], food.serve_label && `serve ${food.serve_label}`].filter(Boolean).join(" · ")}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="leading-tight">{prettyName(food.name).title}</div>
+              <div className="text-muted mt-0.5 text-xs font-normal">
+                {[
+                  prettyName(food.name).full !== prettyName(food.name).title && prettyName(food.name).full,
+                  food.brand,
+                  SOURCE_LABELS[food.source],
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
             </div>
+            {onToggleFavourite && food.id && (
+              <button
+                onClick={onToggleFavourite}
+                className={cx("-mt-1 rounded-full p-2 transition active:scale-90", favourite ? "text-warn" : "text-white/60")}
+                aria-label={favourite ? "Remove from favourites" : "Add to favourites"}
+                aria-pressed={favourite}
+              >
+                <IconStar width={22} height={22} fill={favourite ? "currentColor" : "none"} />
+              </button>
+            )}
           </div>
         )
       }
@@ -60,6 +90,8 @@ export function FoodSheet({
           initialGrams={initialGrams}
           onAdd={onAdd}
           submitLabel={submitLabel}
+          onAddAndNext={onAddAndNext}
+          nextLabel={nextLabel}
         />
       )}
     </Sheet>
@@ -74,7 +106,11 @@ function FoodSheetBody({
   initialGrams,
   onAdd,
   submitLabel,
+  onAddAndNext,
+  nextLabel,
 }: {
+  onAddAndNext?: (entry: NewEntry) => Promise<void>;
+  nextLabel?: string;
   food: Food;
   date: string;
   initialSlot: MealSlot;
@@ -98,12 +134,13 @@ function FoodSheetBody({
 
   const nutrients = useMemo(() => (grams ? nutrientsFor(food, grams) : {}), [food, grams]);
 
-  async function add() {
+  async function add(next = false) {
     if (!grams) return;
+    const go = next && onAddAndNext ? onAddAndNext : onAdd;
     setBusy(true);
     setError(null);
     try {
-      await onAdd({
+      await go({
         date,
         slot,
         kind: food.kind,
@@ -183,9 +220,14 @@ function FoodSheetBody({
       )}
 
       {error && <p className="text-danger text-sm">{error}</p>}
-      <Button className="w-full" size="lg" onClick={add} disabled={busy || !grams}>
+      <Button className="w-full" size="lg" onClick={() => add()} disabled={busy || !grams}>
         {busy ? "Adding…" : `${submitLabel} ${Math.round(grams)} g to ${SLOT_LABELS[slot]} · ${friendlyDate(date)}`}
       </Button>
+      {onAddAndNext && (
+        <Button className="w-full" variant="secondary" onClick={() => add(true)} disabled={busy || !grams}>
+          <IconBarcode width={18} height={18} /> {nextLabel}
+        </Button>
+      )}
     </div>
   );
 }

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { addEntries, deleteEntries, fetchLogRange, getDay, updateEntry, type NewEntry } from "./data";
 import { addDays, today } from "./dates";
 import { fetchWeek, type WeekDay } from "@/server/actions/summary";
+import { fetchFavourites, setFavourite, type Favourite } from "@/server/actions/foods";
 import { rankFrequentFoods, type FrequentFood } from "./frequent";
-import { cacheGet, cachePruneLogs, cacheSet } from "./offline";
+import { cacheGet, cachePruneLogs, cacheSet, handleRequestFailure } from "./offline";
 import type { LogEntry } from "./types";
 import type { DayBundle } from "@/server/repo";
 import { useApp } from "@/components/app-provider";
@@ -59,7 +60,7 @@ export function useDay(date: string) {
           cacheSet(profileId, cacheKey, d);
           setOffline(false);
         },
-        () => setOffline(true),
+        () => setOffline(handleRequestFailure()),
       ),
     [date, cacheKey, profileId],
   );
@@ -161,4 +162,37 @@ export function useWeek(date: string, version = 0) {
     };
   }, [key, date]);
   return state.key === key ? state.days : null;
+}
+
+/** This profile's starred foods, cached for instant display; `toggle` is optimistic. */
+export function useFavourites() {
+  const { profileId } = useApp();
+  const [favs, setFavs] = useState<Favourite[] | null>(() => cacheGet<Favourite[]>(profileId, "favourites"));
+  useEffect(() => {
+    fetchFavourites().then(
+      (f) => {
+        setFavs(f);
+        cacheSet(profileId, "favourites", f);
+      },
+      () => setFavs((f) => f ?? []),
+    );
+  }, [profileId]);
+  const isFav = useCallback((kind: string, id: string) => !!favs?.some((f) => f.kind === kind && f.food_id === id), [favs]);
+  const toggle = useCallback(
+    async (fav: Favourite) => {
+      const on = !isFav(fav.kind, fav.food_id);
+      const next = on ? [...(favs ?? []), fav] : (favs ?? []).filter((f) => !(f.kind === fav.kind && f.food_id === fav.food_id));
+      setFavs(next);
+      cacheSet(profileId, "favourites", next);
+      try {
+        await setFavourite(fav, on);
+      } catch {
+        setFavs(favs);
+        cacheSet(profileId, "favourites", favs);
+      }
+      return on;
+    },
+    [favs, isFav, profileId],
+  );
+  return { favs, isFav, toggle };
 }

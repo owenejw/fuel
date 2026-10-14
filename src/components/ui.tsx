@@ -10,7 +10,9 @@ import {
   type ReactNode,
   type SVGProps,
 } from "react";
-import { IconClose, IconMinus, IconPlus } from "./icons";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { IconChevronLeft, IconClose, IconMinus, IconPlus } from "./icons";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -28,7 +30,7 @@ export function Button({
     <button
       {...props}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100",
+        "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100",
         size === "sm" && "h-9 px-3 text-sm",
         size === "md" && "h-11 px-4",
         size === "lg" && "h-14 px-5 text-lg",
@@ -488,13 +490,46 @@ export function Stepper({
   );
 }
 
-/** Small uppercase heading with an icon, used above cards. */
-export function SectionTitle({ icon: Icon, children, right }: { icon?: IconType; children: ReactNode; right?: ReactNode }) {
+/** The round back button used at the top of every inner page. */
+export function BackButton({ onClick, href, label = "Back" }: { onClick?: () => void; href?: string; label?: string }) {
+  const router = useRouter();
+  const cls = "bg-surface -ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-95";
+  const icon = <IconChevronLeft width={22} height={22} />;
+  if (href)
+    return (
+      <Link href={href} className={cls} aria-label={label}>
+        {icon}
+      </Link>
+    );
   return (
-    <h2 className="text-muted mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
-      {Icon && <Icon width={14} height={14} />}
-      <span className="flex-1">{children}</span>
+    <button onClick={onClick ?? (() => (window.history.length > 1 ? router.back() : router.push("/")))} className={cls} aria-label={label}>
+      {icon}
+    </button>
+  );
+}
+
+/** Section heading: one style across the app. */
+export function Heading({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-2 flex items-end justify-between gap-2 pt-2">
+      <h2 className="text-xl font-bold">{children}</h2>
       {right}
-    </h2>
+    </div>
+  );
+}
+
+/** Grey placeholder shape while something loads. */
+export function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={cx("animate-pulse rounded-3xl bg-white/[0.06]", className)} style={style} aria-hidden />;
+}
+
+/** A page's loading state: a few card-shaped placeholders. */
+export function PageSkeleton({ cards = [176, 120, 120] }: { cards?: number[] }) {
+  return (
+    <div className="space-y-3" aria-label="Loading">
+      {cards.map((h, i) => (
+        <Skeleton key={i} className="w-full" style={{ height: h }} />
+      ))}
+    </div>
   );
 }

@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/components/app-provider";
 import { FoodSheet } from "@/components/food-sheet";
-import { IconDumbbell, IconIdea, IconPlus, IconRest, IconStreak, WORKOUT_ICONS } from "@/components/icons";
+import { IconClose, IconDumbbell, IconIdea, IconPlus, IconRest, IconStreak, WORKOUT_ICONS } from "@/components/icons";
 import { METRIC } from "@/components/rings";
 import { SuggestionsCard } from "@/components/suggestions-card";
 import { WaterSheet } from "@/components/water-sheet";
 import { saveWaterBottles } from "@/server/actions/profile";
 import { AvatarLink, BigStat, ChevronBadge, EnergyCard, MiniBars, Tile } from "@/components/summary";
 import { useToast } from "@/components/toast";
-import { Spinner } from "@/components/ui";
+import { Button, PageSkeleton, Sheet, Spinner, Stepper } from "@/components/ui";
+import { saveWeight } from "@/server/actions/plan";
 import { addWater } from "@/lib/data";
 import { friendlyDate, today } from "@/lib/dates";
 import { toUnit, unitLabel } from "@/lib/energy";
@@ -62,6 +63,7 @@ export function TodayView() {
   const targets = day?.plan.targets;
 
   const [waterOpen, setWaterOpen] = useState(false);
+  const [weighIn, setWeighIn] = useState(false);
   const addWaterMl = async (amount: number) => {
     setDay((d) => ({ ...d, waterMl: Math.max(0, d.waterMl + amount) }));
     try {
@@ -116,11 +118,10 @@ export function TodayView() {
 
       <div className="mt-3 space-y-3 px-4">
         {!day || !targets ? (
-          <div className="text-muted flex justify-center py-16">
-            <Spinner />
-          </div>
+          <PageSkeleton cards={[300, 190, 190]} />
         ) : (
           <>
+            {summary?.recap && <WeeklyRecap recap={summary.recap} unit={unit} />}
             {day.plan.source === "placeholder" && (
               <Link href="/onboarding" className="bg-surface flex items-center gap-3 rounded-3xl p-4 active:scale-[0.98]">
                 <span className="bg-accent/15 text-accent flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
@@ -161,7 +162,7 @@ export function TodayView() {
 
               {/* Vitamins & minerals */}
               <Tile title="Vitamins" href="/micros">
-                <div className="text-[15px]">& minerals this week</div>
+                <div className="text-[15px]">This week</div>
                 {summary?.micros ? (
                   summary.micros.low + summary.micros.over > 0 ? (
                     <>
@@ -198,7 +199,7 @@ export function TodayView() {
               </Tile>
 
               {/* Weight */}
-              <Tile title="Weight" href="/trends">
+              <Tile title="Weight" onClick={() => setWeighIn(true)}>
                 <WeightSummary weights={weights} />
               </Tile>
             </div>
@@ -244,6 +245,20 @@ export function TodayView() {
           }}
         />
       )}
+
+      <WeighInSheet
+        open={weighIn}
+        onClose={() => setWeighIn(false)}
+        latest={weights?.at(-1)?.kg ?? null}
+        onSave={(kg) => {
+          setWeighIn(false);
+          setSummary((cur) => (cur ? { ...cur, weights: [...cur.weights.filter((w) => w.date !== date), { date, kg }] } : cur));
+          saveWeight(date, kg).then(
+            () => toast(`Logged ${kg} kg`),
+            () => toast("Couldn't save your weight — try again"),
+          );
+        }}
+      />
 
       <FoodSheet
         food={openFood}
@@ -381,5 +396,99 @@ function WeightSummary({ weights }: { weights: { date: string; kg: number }[] | 
         {weights.length > 1 ? `${diff > 0 ? "+" : ""}${diff} kg in 30 days` : friendlyDate(last.date)}
       </div>
     </>
+  );
+}
+
+function WeighInSheet({
+  open,
+  onClose,
+  latest,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  latest: number | null;
+  onSave: (kg: number) => void;
+}) {
+  const [kg, setKg] = useState<number | null>(latest);
+  const [seen, setSeen] = useState(open);
+  if (open && !seen) {
+    setSeen(true);
+    setKg(latest);
+  }
+  if (!open && seen) setSeen(false);
+  return (
+    <Sheet open={open} onClose={onClose} title="Weigh-in">
+      <div className="space-y-4">
+        <Stepper
+          label="Today's weight"
+          value={kg}
+          onChange={setKg}
+          step={0.1}
+          decimals={1}
+          min={20}
+          max={400}
+          start={latest ?? 75}
+          unit="kg"
+        />
+        <p className="text-muted text-xs">
+          Weigh at the same time each day (first thing in the morning is best). Trends smooths out the daily ups and downs.
+        </p>
+        <Button size="lg" className="w-full" disabled={!kg || kg < 20} onClick={() => kg && onSave(Math.round(kg * 10) / 10)}>
+          Save weight
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
+type Recap = NonNullable<Summary["recap"]>;
+
+/** Monday to Wednesday: how last week went. Dismissible per week. */
+function WeeklyRecap({ recap, unit }: { recap: Recap; unit: "kj" | "kcal" }) {
+  const key = `kj:recap:${recap.weekStart}`;
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dow = (new Date().getDay() + 6) % 7; // Monday = 0
+  if (hidden || dow > 2 || recap.daysLogged === 0) return null;
+  const pct = recap.avgTargetKj ? Math.round((recap.avgKj / recap.avgTargetKj) * 100) : 0;
+  return (
+    <section className="rounded-3xl p-4" style={{ background: "linear-gradient(135deg, #1d2b4f, #241a3d)" }}>
+      <div className="mb-3 flex items-start gap-2">
+        <div className="flex-1">
+          <div className="text-[13px] font-semibold tracking-wide text-white/60 uppercase">Last week</div>
+          <h2 className="text-xl font-bold">Your weekly recap</h2>
+        </div>
+        <button
+          onClick={() => {
+            try {
+              localStorage.setItem(key, "1");
+            } catch {}
+            setHidden(true);
+          }}
+          className="rounded-full bg-white/10 p-1.5 text-white/70"
+          aria-label="Dismiss"
+        >
+          <IconClose width={16} height={16} />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <BigStat label="Avg energy" value={kj(recap.avgKj, unit)} unit={unitLabel(unit)} color={METRIC.energy.color} size="md" />
+        <BigStat label="Of target" value={`${pct}%`} color={pct >= 90 && pct <= 110 ? METRIC.protein.color : "var(--warn)"} size="md" />
+        <BigStat label="Days logged" value={`${recap.daysLogged}/7`} color={METRIC.fat.color} size="md" />
+        <BigStat label="Protein hit" value={`${recap.proteinDays} days`} color={METRIC.protein.color} size="md" />
+      </div>
+      {recap.weightChange != null && (
+        <p className="mt-3 text-sm text-white/70">
+          Weight {recap.weightChange === 0 ? "held steady" : `${recap.weightChange > 0 ? "up" : "down"} ${Math.abs(recap.weightChange)} kg`}{" "}
+          over the week.
+        </p>
+      )}
+    </section>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { prettyName } from "@/lib/food-names";
+
 import { useCallback, useEffect, useState } from "react";
 import { aiSuggest, type AiSuggestions } from "@/server/actions/ai";
 import { fetchSuggestions } from "@/server/actions/suggest";
@@ -181,7 +183,7 @@ function SuggestionRow({
     <div className={cx("flex items-center gap-2", compact ? "pt-2" : "py-2")}>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">
-          {s.candidate.name}
+          {prettyName(s.candidate.name).title}
           {s.candidate.grams ? <span className="text-muted"> · {Math.round(s.candidate.grams)} g</span> : null}
         </div>
         <div className="text-accent text-xs">{s.reason}</div>

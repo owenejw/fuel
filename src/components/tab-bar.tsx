@@ -42,8 +42,14 @@ export function TabBar() {
       setLens({ x: a.left - b.left, w: a.width });
     };
     measure();
+    // Re-measure whenever the bar's layout settles or changes (fonts, rotation, safe areas).
+    const ro = new ResizeObserver(measure);
+    if (bar.current) ro.observe(bar.current);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [activeIndex]);
 
   const tab = (t: Tab, i: number) => {
