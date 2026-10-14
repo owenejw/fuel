@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import { IconChevronLeft } from "@/components/icons";
-import { Spinner, cx } from "@/components/ui";
+import { BackButton, PageSkeleton, cx } from "@/components/ui";
 import { today } from "@/lib/dates";
 import { microState, type MicroStatus } from "@/lib/nrv";
 import { formatAmount, nutrientDef } from "@/lib/nutrients";
@@ -42,20 +41,14 @@ export function MicrosView() {
     <>
       <header className="pt-safe bg-bg/85 sticky top-0 z-20 px-4 backdrop-blur-xl">
         <div className="flex items-center gap-3 py-3">
-          <button
-            onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-            className="bg-surface flex h-10 w-10 items-center justify-center rounded-full active:scale-95"
-            aria-label="Back"
-          >
-            <IconChevronLeft width={22} height={22} />
-          </button>
+          <BackButton onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} />
           <h1 className="flex-1 text-lg font-semibold">Vitamins &amp; minerals</h1>
         </div>
       </header>
 
       {!data ? (
-        <div className="text-muted flex justify-center py-16">
-          <Spinner />
+        <div className="px-4 pt-3">
+          <PageSkeleton cards={[110, 160, 160]} />
         </div>
       ) : !data.daysLogged ? (
         <p className="text-muted px-6 py-16 text-center">Log some food this week to see your vitamins and minerals.</p>

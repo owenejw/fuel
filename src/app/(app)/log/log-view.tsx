@@ -13,13 +13,14 @@ import {
   IconCheck,
   IconChef,
   IconChevronDown,
-  IconChevronLeft,
   IconClock,
   IconEdit,
   IconMic,
   IconMeal,
   IconPlus,
   IconSearch,
+  IconStar,
+  IconTrending,
   IconTrash,
   SLOT_ICONS,
   type Icon,
@@ -28,7 +29,8 @@ import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { MacroLine } from "@/components/nutrition";
 import { Scanner } from "@/components/scanner";
 import { useToast } from "@/components/toast";
-import { Button, Card, Empty, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
+import { useConfirm } from "@/components/confirm";
+import { BackButton, PageSkeleton, Button, Card, Empty, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
 import {
   addEntries,
   deleteEntries,
@@ -44,17 +46,20 @@ import {
 } from "@/lib/data";
 import { friendlyDate, isValidDate, today } from "@/lib/dates";
 import { SOURCE_LABELS } from "@/lib/foods/shared";
-import type { FrequentFood } from "@/lib/frequent";
-import { useFrequentFoods } from "@/lib/hooks";
+import { recentFoods, type FrequentFood } from "@/lib/frequent";
+import { prettyName } from "@/lib/food-names";
+import { useFavourites, useFrequentFoods } from "@/lib/hooks";
 import { scaleNutrients, sumNutrients } from "@/lib/nutrients";
 import { defaultSlot } from "@/lib/slots";
 import { MEAL_SLOTS, SLOT_LABELS, type Food, type MealSlot, type Recipe, type SavedMeal } from "@/lib/types";
 
-type Tab = "frequent" | "mine" | "recipes" | "meals";
+type Tab = "frequent" | "recent" | "favourites" | "mine" | "recipes" | "meals";
 type Filter = "all" | "household" | "afcd" | "branded";
 
 const TABS: [Tab, string, Icon][] = [
-  ["frequent", "Recent", IconClock],
+  ["frequent", "Frequent", IconTrending],
+  ["recent", "Recent", IconClock],
+  ["favourites", "Favourites", IconStar],
   ["mine", "Our foods", IconBook],
   ["recipes", "Recipes", IconChef],
   ["meals", "Meals", IconMeal],
@@ -92,6 +97,7 @@ export function LogView() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const { unit } = useApp();
 
   const date = isValidDate(params.get("date")) ? params.get("date")! : today();
@@ -100,7 +106,8 @@ export function LogView() {
 
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<{ q: string; foods: Food[] } | null>(null);
-  const [selected, setSelected] = useState<{ food: Food; grams?: number | null } | null>(null);
+  const [selected, setSelected] = useState<{ food: Food; grams?: number | null; fromScan?: boolean } | null>(null);
+  const { favs, isFav, toggle: toggleFav } = useFavourites();
   const [tab, setTab] = useState<Tab>(params.get("tab") === "mine" ? "mine" : "frequent");
   const [filter, setFilter] = useState<Filter>("all");
   const [quickOpen, setQuickOpen] = useState(false);
@@ -198,7 +205,7 @@ export function LogView() {
       setLookingUp(true);
       try {
         const food = await lookupBarcode(code);
-        if (food) setSelected({ food });
+        if (food) setSelected({ food, fromScan: true });
         else setMissingBarcode(code);
       } catch (err) {
         toast(err instanceof Error ? err.message : "Lookup failed");
@@ -210,21 +217,18 @@ export function LogView() {
   );
 
   const SlotIcon = SLOT_ICONS[slot];
+  const logFrequent = (f: FrequentFood) =>
+    void logEntries(
+      [{ date, slot, kind: f.kind, food_id: f.food_id, name: f.name, grams: f.lastGrams, nutrients: f.lastNutrients }],
+      `${f.lastGrams ? `${Math.round(f.lastGrams)} g ` : ""}${prettyName(f.name).title}`,
+    );
+
   const newFoodHref = (barcode?: string) =>
     `/log/new-food?slot=${slot}&date=${date}${barcode ? `&barcode=${barcode}` : ""}${query && !barcode ? `&name=${encodeURIComponent(query)}` : ""}`;
 
   return (
     <>
-      <PageHeader
-        left={
-          date !== today() || slotParam ? (
-            <button onClick={() => router.back()} className="-ml-2 rounded-full p-2" aria-label="Back">
-              <IconChevronLeft />
-            </button>
-          ) : undefined
-        }
-        title="Log food"
-      />
+      <PageHeader left={date !== today() || slotParam ? <BackButton onClick={() => router.back()} /> : undefined} title="Log food" />
 
       <div className="space-y-3 px-4">
         <button
@@ -302,11 +306,13 @@ export function LogView() {
               </Empty>
             ) : (
               <ul className="divide-border divide-y">
-                {results.map((f) => (
-                  <li key={`${f.kind}:${f.id}`}>
-                    <FoodRow food={f} unit={unit} onClick={() => setSelected({ food: f })} />
-                  </li>
-                ))}
+                {[...results]
+                  .sort((a, b) => Number(isFav(b.kind, b.id)) - Number(isFav(a.kind, a.id)))
+                  .map((f) => (
+                    <li key={`${f.kind}:${f.id}`}>
+                      <FoodRow food={f} unit={unit} starred={isFav(f.kind, f.id)} onClick={() => setSelected({ food: f })} />
+                    </li>
+                  ))}
                 <li>
                   <Link href={newFoodHref()} className="text-accent flex items-center gap-2 px-4 py-3 text-sm">
                     <IconPlus width={16} height={16} /> Can&apos;t find it? Create a food
@@ -317,14 +323,16 @@ export function LogView() {
           </Card>
         ) : (
           <>
-            <div className="bg-surface-2 flex rounded-xl p-1">
+            <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
               {TABS.map(([t, label, TabIcon]) => (
                 <button
                   key={t}
+                  role="tab"
+                  aria-selected={tab === t}
                   onClick={() => setTab(t)}
                   className={cx(
-                    "flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg text-xs",
-                    tab === t ? "bg-surface text-text font-medium shadow-sm" : "text-muted",
+                    "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-95",
+                    tab === t ? "bg-text text-bg" : "bg-surface text-text",
                   )}
                 >
                   <TabIcon width={16} height={16} />
@@ -333,54 +341,56 @@ export function LogView() {
               ))}
             </div>
 
-            {tab === "frequent" && (
-              <Card>
-                {frequent === null ? (
-                  <div className="text-muted flex justify-center py-8">
-                    <Spinner />
-                  </div>
-                ) : frequent.length === 0 ? (
-                  <Empty>Foods you log show up here, so you can add them again with one tap.</Empty>
-                ) : (
-                  <ul className="divide-border divide-y">
-                    {frequent.map((f) => (
-                      <li key={f.key} className="flex items-center">
-                        <button
-                          onClick={() => setSelected({ food: frequentToFood(f), grams: f.lastGrams })}
-                          className="min-w-0 flex-1 px-4 py-2.5 text-left"
-                        >
-                          <div className="truncate text-sm">{f.name}</div>
-                          <MacroLine n={f.lastNutrients} unit={unit} />
-                        </button>
-                        <button
-                          className="bg-accent-soft text-accent mr-2 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm"
-                          aria-label={`Add ${f.name} to ${SLOT_LABELS[slot]}`}
-                          onClick={() =>
-                            logEntries(
-                              [
-                                {
-                                  date,
-                                  slot,
-                                  kind: f.kind,
-                                  food_id: f.food_id,
-                                  name: f.name,
-                                  grams: f.lastGrams,
-                                  nutrients: f.lastNutrients,
-                                },
-                              ],
-                              `${f.lastGrams ? `${Math.round(f.lastGrams)} g ` : ""}${f.name}`,
-                            ).catch(() => toast("Could not add"))
-                          }
-                        >
-                          <IconPlus width={16} height={16} />
-                          {f.lastGrams ? `${Math.round(f.lastGrams)} g` : ""}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
+            {(tab === "frequent" || tab === "recent") && (
+              <QuickList
+                foods={frequent === null ? null : tab === "recent" ? recentFoods(frequent) : frequent}
+                empty="Foods you log show up here, so you can add them again with one tap."
+                unit={unit}
+                slot={slot}
+                isFav={isFav}
+                onOpen={(f) => setSelected({ food: frequentToFood(f), grams: f.lastGrams })}
+                onAdd={(f) => logFrequent(f)}
+                showCount={tab === "frequent"}
+              />
             )}
+
+            {tab === "favourites" &&
+              (favs === null ? (
+                <PageSkeleton cards={[64, 64, 64]} />
+              ) : favs.length === 0 ? (
+                <Card>
+                  <Empty>Tap the ☆ on any food to keep it here.</Empty>
+                </Card>
+              ) : (
+                <QuickList
+                  foods={favs.map(
+                    (fv) =>
+                      frequent?.find((f) => f.food_id === fv.food_id && f.kind === fv.kind) ?? {
+                        key: `${fv.kind}:${fv.food_id}`,
+                        kind: fv.kind,
+                        food_id: fv.food_id,
+                        name: fv.name,
+                        count: 0,
+                        lastGrams: null,
+                        lastDate: "",
+                        lastAt: "",
+                        per100: {},
+                        lastNutrients: {},
+                        slots: {},
+                      },
+                  )}
+                  empty=""
+                  unit={unit}
+                  slot={slot}
+                  isFav={isFav}
+                  onOpen={(f) =>
+                    f.count
+                      ? setSelected({ food: frequentToFood(f), grams: f.lastGrams })
+                      : fetchFood(f.kind as "reference", f.food_id!).then((food) => food && setSelected({ food }))
+                  }
+                  onAdd={(f) => logFrequent(f)}
+                />
+              ))}
 
             {tab === "mine" && (
               <Card>
@@ -460,7 +470,15 @@ export function LogView() {
                             className="text-muted ml-1 rounded-full p-2"
                             aria-label={`Delete ${m.name}`}
                             onClick={async () => {
-                              if (!confirm(`Delete saved meal "${m.name}"?`)) return;
+                              if (
+                                !(await confirm({
+                                  title: `Delete "${m.name}"?`,
+                                  message: "This removes the saved meal. Past log entries stay.",
+                                  confirm: "Delete",
+                                  danger: true,
+                                }))
+                              )
+                                return;
                               await deleteSavedMeal(m.id);
                               setMeals((all) => all?.filter((x) => x.id !== m.id) ?? null);
                             }}
@@ -495,6 +513,24 @@ export function LogView() {
       <FoodSheet
         food={selected?.food ?? null}
         initialGrams={selected?.grams}
+        favourite={selected ? isFav(selected.food.kind, selected.food.id) : false}
+        onToggleFavourite={
+          selected?.food.id
+            ? () =>
+                toggleFav({ kind: selected.food.kind, food_id: selected.food.id, name: selected.food.name }).then((on) =>
+                  toast(on ? "Added to favourites" : "Removed from favourites"),
+                )
+            : undefined
+        }
+        onAddAndNext={
+          selected?.fromScan
+            ? async (entry) => {
+                setSelected(null);
+                void logEntries([entry], `${Math.round(entry.grams ?? 0)} g ${prettyName(entry.name).title}`);
+                setScanning(true);
+              }
+            : undefined
+        }
         notice={
           justSaved && (selected?.food.kind === "custom" || selected?.food.kind === "recipe") ? (
             <span className="flex items-start gap-2">
@@ -579,20 +615,99 @@ export function LogView() {
   );
 }
 
-function FoodRow({ food, unit, onClick }: { food: Food; unit: ReturnType<typeof useApp>["unit"]; onClick: () => void }) {
+function FoodRow({
+  food,
+  unit,
+  onClick,
+  starred,
+}: {
+  food: Food;
+  unit: ReturnType<typeof useApp>["unit"];
+  onClick: () => void;
+  starred?: boolean;
+}) {
+  const p = prettyName(food.name, food.brand);
   return (
-    <button onClick={onClick} className="active:bg-surface-2 flex w-full items-center gap-3 px-4 py-2.5 text-left">
+    <button onClick={onClick} className="active:bg-surface-2 flex w-full items-center gap-3 px-4 py-3 text-left">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{food.name}</div>
-        <div className="text-muted truncate text-xs">
-          {[food.brand, SOURCE_LABELS[food.source]].filter(Boolean).join(" · ")} · per 100 g
+        <div className="flex items-center gap-1.5 text-[15px]">
+          {starred && <IconStar width={13} height={13} className="text-warn shrink-0" fill="currentColor" />}
+          <span className="truncate">{p.title}</span>
         </div>
+        <div className="text-muted truncate text-xs">{[p.detail, SOURCE_LABELS[food.source]].filter(Boolean).join(" · ")} · per 100 g</div>
         <MacroLine n={food.per100} unit={unit} />
       </div>
     </button>
   );
 }
 
+/** Frequent / recent / favourite foods: tap to choose an amount, or + to add the last amount straight away. */
+function QuickList({
+  foods,
+  empty,
+  unit,
+  slot,
+  isFav,
+  onOpen,
+  onAdd,
+  showCount,
+}: {
+  foods: FrequentFood[] | null;
+  empty: string;
+  unit: ReturnType<typeof useApp>["unit"];
+  slot: MealSlot;
+  isFav: (kind: string, id: string) => boolean;
+  onOpen: (f: FrequentFood) => void;
+  onAdd: (f: FrequentFood) => void;
+  showCount?: boolean;
+}) {
+  if (foods === null) return <PageSkeleton cards={[64, 64, 64, 64]} />;
+  if (!foods.length)
+    return (
+      <Card>
+        <Empty>{empty}</Empty>
+      </Card>
+    );
+  return (
+    <Card>
+      <ul className="divide-border divide-y">
+        {foods.map((f) => {
+          const p = prettyName(f.name);
+          const canAdd = f.count > 0;
+          return (
+            <li key={f.key} className="flex items-center">
+              <button onClick={() => onOpen(f)} className="active:bg-surface-2 min-w-0 flex-1 px-4 py-3 text-left">
+                <div className="flex items-center gap-1.5 text-[15px]">
+                  {f.food_id && isFav(f.kind, f.food_id) && (
+                    <IconStar width={13} height={13} className="text-warn shrink-0" fill="currentColor" />
+                  )}
+                  <span className="truncate">{p.title}</span>
+                </div>
+                {p.detail && <div className="text-muted truncate text-xs">{p.detail}</div>}
+                {canAdd ? (
+                  <MacroLine n={f.lastNutrients} unit={unit} />
+                ) : (
+                  <span className="text-muted text-xs">Tap to choose an amount</span>
+                )}
+                {showCount && f.count > 1 && <span className="text-muted ml-2 text-[11px]">· logged {f.count}×</span>}
+              </button>
+              {canAdd && (
+                <button
+                  className="bg-accent text-accent-text mr-3 flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold active:scale-90"
+                  aria-label={`Add ${p.title} to ${SLOT_LABELS[slot]}`}
+                  onClick={() => onAdd(f)}
+                >
+                  <IconPlus width={16} height={16} strokeWidth={2.6} />
+                  {f.lastGrams ? `${Math.round(f.lastGrams)} g` : ""}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
 function ActionTile({
   icon: TileIcon,
   label,

@@ -72,7 +72,9 @@ export function Tile({
   children,
   className,
   right,
+  onClick,
 }: {
+  onClick?: () => void;
   title: ReactNode;
   href?: string;
   children: ReactNode;
@@ -84,12 +86,22 @@ export function Tile({
       <div className="mb-2 flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold">{title}</h2>
         {right}
-        {href && <ChevronBadge />}
+        {(href || onClick) && <ChevronBadge />}
       </div>
       {children}
     </>
   );
-  const cls = cx("bg-surface block rounded-3xl p-4", href && "transition active:scale-[0.98] active:brightness-110", className);
+  const cls = cx(
+    "bg-surface block rounded-3xl p-4",
+    (href || onClick) && "transition active:scale-[0.98] active:brightness-110",
+    className,
+  );
+  if (onClick)
+    return (
+      <button onClick={onClick} className={cx(cls, "w-full text-left")}>
+        {inner}
+      </button>
+    );
   return href ? (
     <Link href={href} className={cls}>
       {inner}

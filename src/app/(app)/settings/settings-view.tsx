@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
 import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm";
 import { Button, Card, Input, PageHeader, Toggle, cx } from "@/components/ui";
 import Link from "next/link";
 import {
@@ -35,7 +36,8 @@ import { saveAvatar, saveProfile } from "@/server/actions/profile";
 import { Avatar } from "@/components/summary";
 import { createHealthKey, getHealthStatus } from "@/server/actions/health";
 import { aiAvailable } from "@/server/actions/ai";
-import { getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
+import { getDayPlans, getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
+import { today } from "@/lib/dates";
 import { removePushSubscription, savePushSubscription } from "@/server/actions/push";
 
 function Section({ children }: { id?: string; title?: string; icon?: Icon; children: React.ReactNode }) {
@@ -414,6 +416,9 @@ function TargetsSection() {
           },
         });
       } else if (c.suggested) fill(c.suggested);
+      else
+        // Nothing to calculate from yet: start from the targets in use today, so the boxes aren't blank.
+        getDayPlans(today(), today()).then(([p]) => p && fill({ training: p.targets, rest: p.targets }));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unit]);
@@ -483,7 +488,18 @@ function TargetsSection() {
                 </>
               ) : (
                 <span className="text-muted">
-                  To calculate targets, add your {ctx.missing.join(", ")} (Profile above, and log a weight in Trends).
+                  To calculate targets for you, add{" "}
+                  {ctx.missing.filter((m) => !m.includes("weigh")).length > 0 && (
+                    <>
+                      your {ctx.missing.filter((m) => !m.includes("weigh")).join(", ")} in{" "}
+                      <Link href="/settings/health-details" className="text-accent font-medium">
+                        Health details
+                      </Link>
+                      {ctx.missing.some((m) => m.includes("weigh")) && " and "}
+                    </>
+                  )}
+                  {ctx.missing.some((m) => m.includes("weigh")) && "a weigh-in (tap Weight on Today)"}. Until then you can set them by hand
+                  below.
                 </span>
               )}
             </div>
@@ -575,6 +591,7 @@ const SHORTCUT_NAME = "kilo JOL Sync";
 
 function HealthSection() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [status, setStatus] = useState<{ hasKey: boolean; syncedAt: string | null } | null>(null);
   const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
@@ -584,7 +601,11 @@ function HealthSection() {
   async function makeKey() {
     if (
       status?.hasKey &&
-      !confirm("Make a new sync key? The old one stops working, so you'll need to paste the new one into the shortcut.")
+      !(await confirm({
+        title: "Make a new sync key?",
+        message: "The old one stops working, so you'll need to paste the new one into the shortcut.",
+        confirm: "Make new key",
+      }))
     )
       return;
     try {
@@ -744,7 +765,7 @@ function RemindersSection({ profile, save }: { profile: Profile; save: SaveFn })
     <Section title="Reminders" icon={IconBell}>
       <Card className="space-y-3 p-4">
         {!vapid ? (
-          <p className="text-muted text-sm">Push reminders need VAPID keys configured on the server (see README).</p>
+          <p className="text-muted text-sm">Reminders aren&apos;t set up on the server yet.</p>
         ) : subscribed === null ? (
           <p className="text-muted text-sm">
             Notifications aren&apos;t available here. On iPhone, install kilo JOL to the Home Screen and open it from there.

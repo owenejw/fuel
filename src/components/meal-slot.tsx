@@ -15,7 +15,7 @@ export function SwipeToDelete({ children, onDelete, label }: { children: React.R
   const moved = useRef(false);
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-hidden" data-swipe-row>
       <button
         onClick={() => {
           setX(0);

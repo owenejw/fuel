@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FoodName } from "@/components/food-name";
+
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
@@ -14,6 +16,7 @@ import {
   IconGrid,
   IconMore,
   IconPlus,
+  IconRepeat,
   IconTrash,
   SLOT_ICONS,
   type Icon,
@@ -23,8 +26,8 @@ import { MacroLine } from "@/components/nutrition";
 import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { METRIC, type MetricKey } from "@/components/rings";
 import { useToast } from "@/components/toast";
-import { Button, Input, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
-import { copyEntries, entryToNew, fetchRecentMeals, saveMeal } from "@/lib/data";
+import { Button, Input, PageHeader, PageSkeleton, Sheet, Spinner, cx } from "@/components/ui";
+import { addEntries, copyEntries, entryToNew, fetchRecentMeals, saveMeal } from "@/lib/data";
 import { addDays, friendlyDate, isValidDate, today } from "@/lib/dates";
 import { formatEnergy, type EnergyUnit } from "@/lib/energy";
 import { useDay } from "@/lib/hooks";
@@ -84,6 +87,7 @@ export function MealsView() {
   }
 
   const [tab, setTab] = useState<"overview" | MealSlot>("overview");
+  const swipe = useRef<{ x: number; y: number } | null>(null);
   const tabs: ("overview" | MealSlot)[] = ["overview", ...visibleSlots];
   const onEntry = (e: LogEntry) => (e.kind === "quick" ? setQuick({ slot: e.slot, entry: e }) : setEditing(e));
 
@@ -149,12 +153,26 @@ export function MealsView() {
         </div>
       </div>
 
-      <div key={`${date}:${tab}`} className="page-in space-y-3 px-4 pt-1">
+      <div
+        key={`${date}:${tab}`}
+        className="page-in min-h-[60vh] space-y-3 px-4 pt-1"
+        onTouchStart={(e) => {
+          // Rows you can swipe to delete keep their own gesture.
+          if ((e.target as HTMLElement).closest("[data-swipe-row]")) return (swipe.current = null);
+          swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }}
+        onTouchEnd={(e) => {
+          const st = swipe.current;
+          swipe.current = null;
+          if (!st) return;
+          const dx = e.changedTouches[0].clientX - st.x;
+          const dy = e.changedTouches[0].clientY - st.y;
+          if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) go(addDays(date, dx > 0 ? -1 : 1));
+        }}
+      >
         {offline && <p className="bg-surface-2 text-muted rounded-xl px-3 py-2 text-sm">Offline — showing your saved copy.</p>}
         {loading || !day ? (
-          <div className="text-muted flex justify-center py-10">
-            <Spinner />
-          </div>
+          <PageSkeleton cards={[84, 92, 92, 92]} />
         ) : tab === "overview" ? (
           <>
             <MealsTotals totals={dayTotals.totals} targets={day.plan.targets} unit={unit} date={date} />
@@ -168,6 +186,7 @@ export function MealsView() {
                 totals={slotTotals.get(slot)!.totals}
                 unit={unit}
                 onOpen={() => setTab(slot)}
+                onRepeat={() => copyFromYesterday(slot)}
               />
             ))}
             {entries!.length === 0 && (
@@ -187,6 +206,7 @@ export function MealsView() {
             onDelete={(e) => handleDelete([e.id])}
             onQuick={() => setQuick({ slot: tab })}
             onMenu={() => setMenuSlot(tab)}
+            onRepeat={() => copyFromYesterday(tab)}
           />
         )}
       </div>
@@ -244,6 +264,14 @@ export function MealsView() {
           setMenuSlot(null);
           handleDelete(ids);
         }}
+        onCopyToTomorrow={(items, slot) => {
+          setMenuSlot(null);
+          const to = addDays(date, 1);
+          addEntries(items.map((e) => entryToNew(e, { date: to, slot, time: undefined }))).then(
+            () => toast(`Copied ${SLOT_LABELS[slot].toLowerCase()} to ${friendlyDate(to).toLowerCase()}`),
+            () => toast("Couldn't copy — try again"),
+          );
+        }}
       />
     </>
   );
@@ -258,6 +286,7 @@ function SlotMenu({
   onQuickAdd,
   onCopyYesterday,
   onCopyEntries,
+  onCopyToTomorrow,
   onClear,
 }: {
   slot: MealSlot | null;
@@ -268,6 +297,7 @@ function SlotMenu({
   onQuickAdd: (slot: MealSlot) => void;
   onCopyYesterday: (slot: MealSlot) => void;
   onCopyEntries: (items: LogEntry[], slot: MealSlot) => void;
+  onCopyToTomorrow: (items: LogEntry[], slot: MealSlot) => void;
   onClear: (ids: string[]) => void;
 }) {
   const toast = useToast();
@@ -317,6 +347,9 @@ function SlotMenu({
                 }}
               >
                 Save as a meal…
+              </MenuItem>
+              <MenuItem icon={IconCopy} onClick={() => onCopyToTomorrow(entries, slot)}>
+                Copy to tomorrow
               </MenuItem>
               <MenuItem icon={IconTrash} className="text-danger" onClick={() => onClear(entries.map((e) => e.id))}>
                 Clear {SLOT_LABELS[slot].toLowerCase()}
@@ -457,7 +490,9 @@ function MealSummaryCard({
   totals,
   unit,
   onOpen,
+  onRepeat,
 }: {
+  onRepeat: () => void;
   slot: MealSlot;
   date: string;
   count: number;
@@ -492,6 +527,15 @@ function MealSummaryCard({
           )}
         </span>
       </button>
+      {!count && (
+        <button
+          onClick={onRepeat}
+          className="bg-surface-2 flex h-10 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-semibold active:scale-95"
+          aria-label={`Same ${SLOT_LABELS[slot].toLowerCase()} as yesterday`}
+        >
+          <IconRepeat width={14} height={14} /> Yesterday&apos;s
+        </button>
+      )}
       <Link
         href={`/log?slot=${slot}&date=${date}`}
         className="bg-accent text-accent-text flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-90"
@@ -514,7 +558,9 @@ function MealDetail({
   onDelete,
   onQuick,
   onMenu,
+  onRepeat,
 }: {
+  onRepeat: () => void;
   slot: MealSlot;
   date: string;
   entries: LogEntry[];
@@ -567,7 +613,7 @@ function MealDetail({
                 <SwipeToDelete onDelete={() => onDelete(e)} label={`Delete ${e.name}`}>
                   <button onClick={() => onEntry(e)} className="active:bg-surface-2 flex w-full items-center gap-3 px-4 py-3 text-left">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[15px]">{e.name}</div>
+                      <FoodName name={e.name} className="text-[15px]" />
                       <MacroLine n={e.nutrients} unit={unit} />
                     </div>
                     <span className="tabular text-muted shrink-0 text-sm">{e.grams ? `${Math.round(e.grams)} g` : "quick"}</span>
@@ -579,7 +625,12 @@ function MealDetail({
           <p className="text-muted px-1 text-xs">Tap a food to change it · swipe left to delete</p>
         </>
       ) : (
-        <p className="text-muted py-6 text-center text-sm">Nothing logged for {SLOT_LABELS[slot].toLowerCase()} yet.</p>
+        <div className="space-y-3 py-4 text-center">
+          <p className="text-muted text-sm">Nothing logged for {SLOT_LABELS[slot].toLowerCase()} yet.</p>
+          <Button variant="secondary" className="w-full" onClick={onRepeat}>
+            <IconRepeat width={16} height={16} /> Same as yesterday
+          </Button>
+        </div>
       )}
     </>
   );

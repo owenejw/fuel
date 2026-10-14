@@ -40,6 +40,7 @@ import {
   Moon,
   Pencil,
   Plus,
+  Repeat,
   Route,
   Ruler,
   Salad,
@@ -49,6 +50,7 @@ import {
   Settings,
   Smartphone,
   Sparkles,
+  Star,
   Store,
   Sun,
   Sunrise,
@@ -163,3 +165,6 @@ export const IconRest: Icon = Armchair;
 export const IconHeart: Icon = HeartPulse;
 export const IconGrid: Icon = LayoutGrid;
 export const IconMic: Icon = Mic;
+export const IconStar: Icon = Star;
+export const IconTrending: Icon = TrendingUp;
+export const IconRepeat: Icon = Repeat;

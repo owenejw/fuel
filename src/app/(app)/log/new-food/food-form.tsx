@@ -1,21 +1,12 @@
 "use client";
 
+import { useConfirm } from "@/components/confirm";
+
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import {
-  IconCamera,
-  IconCarbs,
-  IconChevronLeft,
-  IconEnergy,
-  IconFat,
-  IconFibre,
-  IconProtein,
-  IconUsers,
-  SLOT_ICONS,
-  type Icon,
-} from "@/components/icons";
-import { Button, Card, Input, PageHeader, cx } from "@/components/ui";
+import { IconCamera, IconCarbs, IconEnergy, IconFat, IconFibre, IconProtein, IconUsers, SLOT_ICONS, type Icon } from "@/components/icons";
+import { BackButton, Button, Card, Input, PageHeader, cx } from "@/components/ui";
 import { deleteCustomFood, fetchFood, saveCustomFood, type CustomFoodInput } from "@/lib/data";
 import { fromUnit, toUnit, unitLabel } from "@/lib/energy";
 import { NUTRIENTS, PANEL_KEYS, round, type NutrientKey, type Nutrients } from "@/lib/nutrients";
@@ -39,6 +30,7 @@ export function FoodForm() {
   const params = useSearchParams();
   const router = useRouter();
   const { unit, profile } = useApp();
+  const confirm = useConfirm();
   const [reading, setReading] = useState(false);
 
   async function readPanel(file: File) {
@@ -171,14 +163,7 @@ export function FoodForm() {
 
   return (
     <>
-      <PageHeader
-        left={
-          <button onClick={() => router.back()} className="-ml-2 rounded-full p-2" aria-label="Back">
-            <IconChevronLeft />
-          </button>
-        }
-        title={editId ? "Edit food" : "Create food"}
-      />
+      <PageHeader left={<BackButton onClick={() => router.back()} />} title={editId ? "Edit food" : "Create food"} />
       <form onSubmit={submit} className="space-y-4 px-4">
         {profile.ai_enabled && (
           <label className="bg-accent-soft text-accent flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium">
@@ -279,7 +264,15 @@ export function FoodForm() {
             variant="secondary"
             className="text-danger w-full"
             onClick={async () => {
-              if (!confirm("Delete this food? Past log entries keep their values.")) return;
+              if (
+                !(await confirm({
+                  title: "Delete this food?",
+                  message: "It's removed for everyone in the household. Past log entries keep their values.",
+                  confirm: "Delete",
+                  danger: true,
+                }))
+              )
+                return;
               await deleteCustomFood(editId);
               router.replace(back());
             }}

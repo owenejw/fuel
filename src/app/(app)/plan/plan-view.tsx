@@ -10,28 +10,34 @@ import {
   Card,
   ChoiceCards,
   Empty,
+  Heading,
   Input,
   PageHeader,
+  PageSkeleton,
+  Skeleton,
   Pills,
   Segmented,
   Sheet,
-  Spinner,
   Stepper,
   Toggle,
   cx,
 } from "@/components/ui";
 import {
   IconCalendar,
+  IconCalendarSync,
   IconCheck,
-  IconChevronLeft,
-  IconChevronRight,
+  IconChevronDown,
+  IconDumbbell,
   IconPlus,
+  IconRest,
+  IconSparkles,
   IconTrash,
   IconTrophy,
   WORKOUT_ICONS,
 } from "@/components/icons";
 import { getDay } from "@/lib/data";
-import { addDays, friendlyDate, parseDate, today } from "@/lib/dates";
+import { addDays, friendlyDate, today } from "@/lib/dates";
+import { DayTypeSheet, WeekNav, mondayOf } from "@/components/week";
 import { fmtMin } from "@/lib/fuelling";
 import { WORKOUT_LABELS, WORKOUT_TYPES, type Intensity, type Workout, type WorkoutInput, type WorkoutType } from "@/lib/types";
 import type { DayBundle, DayPlan } from "@/server/repo";
@@ -50,7 +56,8 @@ const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 export function PlanView() {
   const { profile } = useApp();
   const toast = useToast();
-  const [start, setStart] = useState(today());
+  const [start, setStart] = useState(() => mondayOf(today()));
+  const [dayTypeFor, setDayTypeFor] = useState<string | null>(null);
   const [plans, setPlans] = useState<DayPlan[] | null>(null);
   const [selected, setSelected] = useState(today());
   const [day, setDayBundle] = useState<DayBundle | null>(null);
@@ -73,7 +80,7 @@ export function PlanView() {
           profile.calendar_ics_url ? (
             <button
               disabled={syncing}
-              className="bg-surface-2 rounded-full px-3 py-1.5 text-sm"
+              className="bg-surface flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium active:scale-95 disabled:opacity-60"
               onClick={async () => {
                 setSyncing(true);
                 try {
@@ -87,63 +94,65 @@ export function PlanView() {
                 }
               }}
             >
-              {syncing ? "Syncing…" : "Sync calendar"}
+              <IconCalendarSync width={16} height={16} className="text-accent" /> {syncing ? "Syncing…" : "Sync"}
             </button>
           ) : (
-            <Link href="/settings/calendar" className="text-accent text-sm">
-              Connect calendar
+            <Link
+              href="/settings/calendar"
+              className="bg-surface flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium active:scale-95"
+            >
+              <IconCalendarSync width={16} height={16} className="text-accent" /> Connect calendar
             </Link>
           )
         }
       />
       <div className="space-y-3 px-4">
-        <div className="flex items-center justify-between text-sm">
-          <button onClick={() => setStart(addDays(start, -7))} className="text-accent rounded-lg px-2 py-1">
-            <IconChevronLeft width={18} height={18} className="inline" /> Earlier
-          </button>
-          <span className="text-muted">
-            {parseDate(start).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} –{" "}
-            {parseDate(addDays(start, 6)).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
-          </span>
-          <button onClick={() => setStart(addDays(start, 7))} className="text-accent rounded-lg px-2 py-1">
-            Later <IconChevronRight width={18} height={18} className="inline" />
-          </button>
-        </div>
+        <WeekNav weekStart={start} onChange={setStart} maxAhead={8} />
 
         {!plans ? (
-          <div className="text-muted flex justify-center py-8">
-            <Spinner />
-          </div>
+          <PageSkeleton cards={[96, 96, 96, 96]} />
         ) : (
-          <Card>
-            <ul className="divide-border divide-y">
-              {plans.map((p) => (
-                <li key={p.date} className={cx(p.date === selected && "bg-surface-2/60")}>
-                  <div className="flex items-center gap-2 px-4 pt-2.5">
-                    <button onClick={() => setSelected(p.date)} className="flex-1 text-left">
-                      <span className="font-medium">{friendlyDate(p.date)}</span>
-                      <span
-                        className={cx(
-                          "ml-2 rounded-full px-2 py-0.5 text-xs",
-                          p.training ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted",
-                        )}
-                      >
-                        {p.training ? "Training" : "Rest"}
-                      </span>
-                      {p.carbLoadingFor && <span className="bg-carbs/15 text-carbs ml-1 rounded-full px-2 py-0.5 text-xs">Carb load</span>}
-                    </button>
-                    <button
-                      onClick={() => setEditing({ date: p.date })}
-                      className="text-accent rounded-full p-2"
-                      aria-label={`Add workout on ${friendlyDate(p.date)}`}
-                    >
-                      <IconPlus width={20} height={20} />
-                    </button>
-                  </div>
-                  <ul className="px-4 pb-2.5">
-                    {p.workouts.length === 0 && <li className="text-muted text-xs">No sessions</li>}
+          <div key={start} className="page-in space-y-2">
+            {plans.map((p) => (
+              <div
+                key={p.date}
+                className={cx(
+                  "bg-surface rounded-3xl p-4 transition",
+                  p.date === selected && "ring-accent/60 ring-1",
+                  p.date < today() && "opacity-70",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setSelected(p.date)} className="min-w-0 flex-1 text-left">
+                    <span className={cx("block text-[17px] font-semibold", p.date === today() && "text-accent")}>
+                      {friendlyDate(p.date)}
+                    </span>
+                    {p.carbLoadingFor && <span className="text-carbs block text-xs">Carb loading for {p.carbLoadingFor}</span>}
+                  </button>
+                  <button
+                    onClick={() => setDayTypeFor(p.date)}
+                    className={cx(
+                      "flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold active:scale-95",
+                      p.training ? "bg-protein/15 text-protein" : "bg-surface-2 text-text",
+                    )}
+                    aria-label={`${friendlyDate(p.date)}: ${p.training ? "training" : "rest"} day. Change`}
+                  >
+                    {p.training ? <IconDumbbell width={13} height={13} /> : <IconRest width={13} height={13} />}
+                    {p.training ? "Training" : "Rest"}
+                    <IconChevronDown width={13} height={13} />
+                  </button>
+                  <button
+                    onClick={() => setEditing({ date: p.date })}
+                    className="bg-accent text-accent-text flex h-9 w-9 items-center justify-center rounded-full active:scale-90"
+                    aria-label={`Add workout on ${friendlyDate(p.date)}`}
+                  >
+                    <IconPlus width={18} height={18} strokeWidth={2.6} />
+                  </button>
+                </div>
+                {p.workouts.length > 0 && (
+                  <ul className="mt-2 space-y-1">
                     {p.workouts.map((w) => (
-                      <li key={w.id} className="flex items-center gap-2 py-1">
+                      <li key={w.id} className="flex items-center gap-3">
                         <button
                           aria-label={w.completed ? "Mark not done" : "Mark done"}
                           aria-pressed={w.completed}
@@ -152,36 +161,46 @@ export function PlanView() {
                             load();
                           }}
                           className={cx(
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                            w.completed ? "bg-accent text-accent-text" : "bg-surface-2 text-muted",
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition active:scale-90",
+                            w.completed ? "bg-protein text-black" : "bg-surface-2 text-protein",
                           )}
                         >
                           {(() => {
                             const WIcon = w.completed ? IconCheck : WORKOUT_ICONS[w.type];
-                            return <WIcon width={16} height={16} />;
+                            return <WIcon width={17} height={17} />;
                           })()}
                         </button>
-                        <button onClick={() => setEditing({ workout: w, date: w.date })} className="min-w-0 flex-1 text-left text-sm">
-                          <span className={cx(w.completed && "text-muted line-through")}>{w.title || WORKOUT_LABELS[w.type]}</span>
-                          <span className="text-muted text-xs">
-                            {w.start_time ? ` · ${fmtMin(toMin(w.start_time))}` : ""}
-                            {w.duration_min ? ` · ${w.duration_min} min` : ""} · {w.intensity}
-                            {w.is_race ? " · race" : ""}
-                            {w.source === "calendar" && <IconCalendar width={12} height={12} className="ml-1 inline" />}
+                        <button
+                          onClick={() => setEditing({ workout: w, date: w.date })}
+                          className="min-w-0 flex-1 py-1 text-left active:opacity-70"
+                        >
+                          <span className={cx("block truncate text-[15px]", w.completed && "text-muted line-through")}>
+                            {w.title || WORKOUT_LABELS[w.type]}
+                            {w.source === "calendar" && <IconCalendar width={12} height={12} className="text-muted ml-1.5 inline" />}
+                          </span>
+                          <span className="text-muted block text-xs">
+                            {[
+                              w.start_time && fmtMin(toMin(w.start_time)),
+                              w.duration_min && `${w.duration_min} min`,
+                              w.intensity,
+                              w.is_race && "race",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                           </span>
                         </button>
                       </li>
                     ))}
                   </ul>
-                </li>
-              ))}
-            </ul>
-          </Card>
+                )}
+              </div>
+            ))}
+          </div>
         )}
 
         {day && day.plan.workouts.some((w) => w.type !== "rest") && (
           <>
-            <h2 className="text-muted pt-2 text-sm font-semibold tracking-wide uppercase">{friendlyDate(selected)} · fuelling</h2>
+            <Heading>{friendlyDate(selected)}&apos;s fuelling</Heading>
             <FuellingCard
               items={day.fuelling}
               workouts={day.plan.workouts}
@@ -191,7 +210,7 @@ export function PlanView() {
           </>
         )}
         {day?.plan.carbLoadingFor && (
-          <p className="bg-accent-soft text-accent rounded-xl px-3 py-2 text-sm">
+          <p className="bg-carbs/10 text-carbs rounded-2xl px-4 py-3 text-sm">
             {day.plan.carbLoadingFor} is coming up — carbs for {friendlyDate(selected).toLowerCase()} are raised to{" "}
             {day.plan.targets.carbs_g} g (about 8 g/kg).
           </p>
@@ -199,6 +218,8 @@ export function PlanView() {
 
         <GroceryList />
       </div>
+
+      <DayTypeSheet date={dayTypeFor} onClose={() => setDayTypeFor(null)} onChanged={() => load()} />
 
       <WorkoutSheet
         state={editing}
@@ -336,25 +357,28 @@ function GroceryList() {
   }, []);
 
   return (
-    <section className="pt-2">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-muted text-sm font-semibold tracking-wide uppercase">Grocery list</h2>
-        <button
-          disabled={busy}
-          className="text-accent text-sm"
-          onClick={async () => {
-            setBusy(true);
-            try {
-              setItems(await generateGrocery());
-              toast("Added your staples and nutrient boosters");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {busy ? "Building…" : "Suggest items"}
-        </button>
-      </div>
+    <section>
+      <Heading
+        right={
+          <button
+            disabled={busy}
+            className="bg-surface flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium active:scale-95 disabled:opacity-60"
+            onClick={async () => {
+              setBusy(true);
+              try {
+                setItems(await generateGrocery());
+                toast("Added your staples and nutrient boosters");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <IconSparkles width={15} height={15} className="text-accent" /> {busy ? "Building…" : "Suggest items"}
+          </button>
+        }
+      >
+        Grocery list
+      </Heading>
       <Card>
         <form
           className="border-border flex gap-2 border-b p-2"
@@ -370,15 +394,15 @@ function GroceryList() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Add an item"
-            className="bg-surface-2 h-10 flex-1 rounded-lg px-3 outline-none"
+            className="bg-surface-2 h-10 flex-1 rounded-full px-4 outline-none"
           />
           <Button size="sm" type="submit">
             Add
           </Button>
         </form>
         {items === null ? (
-          <div className="text-muted flex justify-center py-6">
-            <Spinner />
+          <div className="p-3">
+            <Skeleton className="h-10" />
           </div>
         ) : items.length === 0 ? (
           <Empty>Tap “Suggest items” to build a list from what you eat and what you&apos;re low on.</Empty>
@@ -386,21 +410,28 @@ function GroceryList() {
           <ul className="divide-border divide-y">
             {items.map((i) => (
               <li key={i.id}>
-                <label className="flex items-center gap-3 px-4 py-2.5">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 accent-[var(--accent)]"
-                    checked={i.checked}
-                    onChange={async (e) => {
-                      setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, checked: e.target.checked } : x)) ?? null);
-                      await toggleGrocery(i.id, e.target.checked);
-                    }}
-                  />
-                  <span className={cx("flex-1 text-sm", i.checked && "text-muted line-through")}>
+                <button
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-white/5"
+                  aria-pressed={i.checked}
+                  onClick={() => {
+                    const checked = !i.checked;
+                    setItems((all) => all?.map((x) => (x.id === i.id ? { ...x, checked } : x)) ?? null);
+                    toggleGrocery(i.id, checked).catch(() => toast("Couldn't save — try again"));
+                  }}
+                >
+                  <span
+                    className={cx(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition",
+                      i.checked ? "border-accent bg-accent text-accent-text" : "border-white/30",
+                    )}
+                  >
+                    {i.checked && <IconCheck width={14} height={14} strokeWidth={3} />}
+                  </span>
+                  <span className={cx("flex-1 text-[15px]", i.checked && "text-muted line-through")}>
                     {i.name}
                     {i.reason && <span className="text-muted block text-xs">{i.reason}</span>}
                   </span>
-                </label>
+                </button>
               </li>
             ))}
           </ul>

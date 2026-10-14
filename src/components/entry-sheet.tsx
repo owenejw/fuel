@@ -1,5 +1,7 @@
 "use client";
 
+import { FoodName } from "./food-name";
+
 import { useState } from "react";
 import type { EnergyUnit } from "@/lib/energy";
 import { scaleNutrients } from "@/lib/nutrients";
@@ -25,7 +27,7 @@ export function EntrySheet({
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
-    <Sheet open={!!entry} onClose={onClose} title={entry && <span className="block truncate">{entry.name}</span>}>
+    <Sheet open={!!entry} onClose={onClose} title={entry && <FoodName name={entry.name} full />}>
       {entry && <EntryForm key={entry.id} entry={entry} unit={unit} onClose={onClose} onUpdate={onUpdate} onDelete={onDelete} />}
     </Sheet>
   );

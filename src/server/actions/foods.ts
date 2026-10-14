@@ -150,3 +150,34 @@ export async function deleteSavedMeal(id: string) {
   const pid = await requireProfileId();
   await (await db()).query(`delete from meals_saved where id = $1 and profile_id = $2`, [id, pid]);
 }
+
+// ---------------------------------------------------------------------------
+// Favourites (per profile)
+// ---------------------------------------------------------------------------
+
+export type Favourite = { kind: "reference" | "custom" | "recipe"; food_id: string; name: string };
+
+export async function fetchFavourites(): Promise<Favourite[]> {
+  const pid = await requireProfileId();
+  return (await db()).query<Favourite>(`select kind, food_id, name from favourite_foods where profile_id = $1 order by name`, [pid]);
+}
+
+const Fav = z.object({
+  kind: z.enum(["reference", "custom", "recipe"]),
+  food_id: z.string().uuid(),
+  name: z.string().trim().min(1).max(200),
+});
+
+/** Star or unstar a food. Returns whether it's now a favourite. */
+export async function setFavourite(input: Favourite, on: boolean): Promise<boolean> {
+  const pid = await requireProfileId();
+  const f = Fav.parse(input);
+  const q = await db();
+  if (on)
+    await q.query(
+      `insert into favourite_foods (profile_id, kind, food_id, name) values ($1, $2, $3, $4) on conflict (profile_id, kind, food_id) do update set name = excluded.name`,
+      [pid, f.kind, f.food_id, f.name],
+    );
+  else await q.query(`delete from favourite_foods where profile_id = $1 and kind = $2 and food_id = $3`, [pid, f.kind, f.food_id]);
+  return on;
+}

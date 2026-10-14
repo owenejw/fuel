@@ -10,6 +10,8 @@ export type FrequentFood = {
   count: number;
   lastGrams: number | null;
   lastDate: string;
+  /** Date and time of the last log, for the Recent list. */
+  lastAt: string;
   /** Per 100 g, derived from the most recent snapshot. */
   per100: Nutrients;
   /** Nutrients of the most recent serving (used for quick re-log). */
@@ -23,7 +25,7 @@ export function entryKey(e: Pick<LogEntry, "kind" | "reference_food_id" | "custo
 }
 
 /** Rank foods this user has logged by frequency (ties → most recent). Quick adds are excluded. */
-export function rankFrequentFoods(entries: LogEntry[], limit = 30): FrequentFood[] {
+export function rankFrequentFoods(entries: LogEntry[], limit = 40): FrequentFood[] {
   const map = new Map<string, FrequentFood>();
   const sorted = [...entries].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
   for (const e of sorted) {
@@ -41,6 +43,7 @@ export function rankFrequentFoods(entries: LogEntry[], limit = 30): FrequentFood
         count: 0,
         lastGrams: e.grams,
         lastDate: e.date,
+        lastAt: `${e.date}T${e.time}`,
         per100,
         lastNutrients: e.nutrients,
         slots: {},
@@ -51,4 +54,9 @@ export function rankFrequentFoods(entries: LogEntry[], limit = 30): FrequentFood
     f.slots[e.slot] = (f.slots[e.slot] ?? 0) + 1;
   }
   return [...map.values()].sort((a, b) => b.count - a.count || (a.lastDate < b.lastDate ? 1 : -1)).slice(0, limit);
+}
+
+/** Same foods, most recently logged first. */
+export function recentFoods(foods: FrequentFood[]): FrequentFood[] {
+  return [...foods].sort((a, b) => ((a.lastAt ?? a.lastDate) < (b.lastAt ?? b.lastDate) ? 1 : -1));
 }

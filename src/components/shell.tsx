@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { handleRequestFailure } from "@/lib/offline";
 
 // Tab roots: nothing to go back to, so no edge swipe there.
 const ROOTS = ["/", "/meals", "/trends", "/plan"];
@@ -14,6 +15,67 @@ export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const page = useRef<HTMLDivElement>(null);
+
+  // Pull down from the top to refresh (installed app only; Safari already does this in the browser).
+  const pull = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const ind = pull.current;
+    if (!standalone || !ind) return;
+    let startY = 0;
+    let dy = 0;
+    let active = false;
+    const onStart = (e: TouchEvent) => {
+      if (window.scrollY > 0 || document.querySelector("dialog[open]")) return;
+      startY = e.touches[0].clientY;
+      dy = 0;
+      active = true;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!active) return;
+      dy = e.touches[0].clientY - startY;
+      if (dy <= 0 || window.scrollY > 0) {
+        ind.style.opacity = "0";
+        return;
+      }
+      const d = Math.min(90, dy * 0.5);
+      ind.style.transition = "none";
+      ind.style.opacity = String(Math.min(1, d / 60));
+      ind.style.transform = `translateY(${d}px) rotate(${d * 4}deg)`;
+    };
+    const onEnd = () => {
+      if (!active) return;
+      active = false;
+      ind.style.transition = "transform 0.25s, opacity 0.25s";
+      if (dy * 0.5 >= 70) {
+        ind.style.transform = "translateY(56px)";
+        ind.classList.add("animate-spin");
+        window.location.reload();
+      } else {
+        ind.style.transform = "translateY(0)";
+        ind.style.opacity = "0";
+      }
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: true });
+    document.addEventListener("touchend", onEnd);
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, []);
+
+  // A server function from an older version failing (after a deploy) → reload once to get the new version.
+  useEffect(() => {
+    const onReject = (e: PromiseRejectionEvent) => {
+      const msg = String((e.reason as Error | undefined)?.message ?? e.reason ?? "");
+      if (/server action|failed to find|unexpected response|failed to fetch/i.test(msg)) handleRequestFailure();
+    };
+    window.addEventListener("unhandledrejection", onReject);
+    return () => window.removeEventListener("unhandledrejection", onReject);
+  }, []);
 
   useEffect(() => {
     const el = page.current;
@@ -85,8 +147,15 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   return (
-    <div ref={page} key={pathname} className="page-in bg-bg mx-auto min-h-dvh max-w-lg pb-32">
-      {children}
-    </div>
+    <>
+      <div
+        ref={pull}
+        aria-hidden
+        className="border-accent pointer-events-none fixed top-[calc(env(safe-area-inset-top)-28px)] left-1/2 z-40 -ml-3.5 h-7 w-7 rounded-full border-[3px] border-t-transparent opacity-0"
+      />
+      <div ref={page} key={pathname} className="page-in bg-bg mx-auto min-h-dvh max-w-lg pb-32">
+        {children}
+      </div>
+    </>
   );
 }

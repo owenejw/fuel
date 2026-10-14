@@ -1,30 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { prettyName } from "@/lib/food-names";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
-import {
-  IconCarbs,
-  IconChevronLeft,
-  IconChevronRight,
-  IconDumbbell,
-  IconEnergy,
-  IconFat,
-  IconFibre,
-  IconProtein,
-  IconRest,
-  IconSparkles,
-} from "@/components/icons";
+import { IconCarbs, IconDumbbell, IconEnergy, IconFat, IconFibre, IconProtein, IconRest } from "@/components/icons";
 import { METRIC, type MetricKey } from "@/components/rings";
 import { BigStat, ChevronBadge, EnergyCard, MiniBars } from "@/components/summary";
-import { ChoiceCards, Sheet, Spinner, cx } from "@/components/ui";
-import { setDayType } from "@/lib/data";
-import { addDays, friendlyDate, isValidDate, parseDate, today } from "@/lib/dates";
+import { DayTypeSheet, WeekPicker } from "@/components/week";
+import { BackButton, PageSkeleton, cx } from "@/components/ui";
+import { friendlyDate, isValidDate, parseDate, today } from "@/lib/dates";
 import { formatEnergy, toUnit, unitLabel, type EnergyUnit } from "@/lib/energy";
-import { useDay, type WeekDay } from "@/lib/hooks";
-import { getDayPlans } from "@/server/actions/plan";
-import { fetchWeek } from "@/server/actions/summary";
+import { useDay } from "@/lib/hooks";
 import { fluidTargetMl } from "@/lib/nrv";
 import type { NutrientKey } from "@/lib/nutrients";
 import { MEAL_SLOTS, SLOT_LABELS, type DayTargets, type LogEntry } from "@/lib/types";
@@ -47,7 +36,6 @@ const SHORT: Record<string, string> = {
 };
 
 const SECTION_ICONS = { energy: IconEnergy, protein: IconProtein, carbs: IconCarbs, fat: IconFat, fibre: IconFibre } as const;
-const mondayOf = (d: string) => addDays(d, -((parseDate(d).getDay() + 6) % 7));
 
 /** One day in detail: the energy card, then each nutrient with where it came from. */
 export function NutritionView() {
@@ -72,13 +60,7 @@ export function NutritionView() {
     <>
       <header className="pt-safe bg-bg/85 sticky top-0 z-20 px-4 pb-2 backdrop-blur-xl">
         <div className="flex items-center gap-3 py-3">
-          <button
-            onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-            className="bg-surface flex h-10 w-10 items-center justify-center rounded-full active:scale-95"
-            aria-label="Back"
-          >
-            <IconChevronLeft width={22} height={22} />
-          </button>
+          <BackButton onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} />
           <div className="min-w-0 flex-1">
             <h1 className="text-lg leading-tight font-semibold">Nutrition</h1>
             <div className="text-muted text-[13px]">
@@ -97,8 +79,8 @@ export function NutritionView() {
       </header>
 
       {!day || !entries ? (
-        <div className="text-muted flex justify-center py-16">
-          <Spinner />
+        <div className="px-4 pt-3">
+          <PageSkeleton cards={[260, 80, 220]} />
         </div>
       ) : (
         <div key={date} className="page-in space-y-6 px-4 pt-3 pb-6">
@@ -207,179 +189,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-2 text-xl font-bold">{children}</h2>;
 }
 
-/**
- * Monday–Sunday day picker. Swipe or use the arrows for other weeks; past days open their numbers,
- * upcoming days let you mark them as training or rest.
- */
-function WeekPicker({
-  selected,
-  version,
-  onSelect,
-  onPlanDay,
-}: {
-  selected: string;
-  version: number;
-  onSelect: (d: string) => void;
-  onPlanDay: (d: string) => void;
-}) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(selected));
-  const [weeks, setWeeks] = useState<Record<string, WeekDay[]>>({});
-  const [loaded, setLoaded] = useState<Record<string, number>>({});
-  const touch = useRef<{ x: number; y: number } | null>(null);
-  const t = today();
-  const thisWeek = mondayOf(t);
-
-  useEffect(() => {
-    if (loaded[weekStart] === version) return;
-    let live = true;
-    fetchWeek(weekStart).then(
-      (d) => {
-        if (!live) return;
-        setWeeks((w) => ({ ...w, [weekStart]: d }));
-        setLoaded((l) => ({ ...l, [weekStart]: version }));
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [weekStart, version, loaded]);
-
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const data = weeks[weekStart];
-  const label =
-    weekStart === thisWeek
-      ? "This week"
-      : weekStart === addDays(thisWeek, -7)
-        ? "Last week"
-        : weekStart === addDays(thisWeek, 7)
-          ? "Next week"
-          : `${parseDate(weekStart).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} – ${parseDate(addDays(weekStart, 6)).toLocaleDateString("en-AU", { day: "numeric", month: "short" })}`;
-  const canNext = weekStart < addDays(thisWeek, 7);
-
-  return (
-    <div
-      onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
-      onTouchEnd={(e) => {
-        const s = touch.current;
-        touch.current = null;
-        if (!s) return;
-        const dx = e.changedTouches[0].clientX - s.x;
-        const dy = e.changedTouches[0].clientY - s.y;
-        if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
-        if (dx > 0) setWeekStart((w) => addDays(w, -7));
-        else if (canNext) setWeekStart((w) => addDays(w, 7));
-      }}
-    >
-      <div className="mb-1 flex items-center justify-between">
-        <button
-          onClick={() => setWeekStart((w) => addDays(w, -7))}
-          className="text-muted rounded-full p-1.5 active:scale-90"
-          aria-label="Previous week"
-        >
-          <IconChevronLeft width={18} height={18} />
-        </button>
-        <span className="text-muted text-[13px] font-semibold">{label}</span>
-        <button
-          onClick={() => canNext && setWeekStart((w) => addDays(w, 7))}
-          disabled={!canNext}
-          className="text-muted rounded-full p-1.5 active:scale-90 disabled:opacity-30"
-          aria-label="Next week"
-        >
-          <IconChevronRight width={18} height={18} />
-        </button>
-      </div>
-      <div key={weekStart} className="page-in grid grid-cols-7 gap-1">
-        {days.map((d, i) => {
-          const info = data?.[i];
-          const isSel = d === selected;
-          const future = d > t;
-          return (
-            <button
-              key={d}
-              onClick={() => (future ? onPlanDay(d) : onSelect(d))}
-              className="flex flex-col items-center gap-1 rounded-xl py-1 active:opacity-60"
-              aria-label={future ? `Plan ${d}` : d}
-              aria-pressed={isSel}
-            >
-              <span className={cx("text-[11px] font-semibold", d === t ? "text-accent" : "text-muted")}>{"MTWTFSS"[i]}</span>
-              <span
-                className={cx(
-                  "tabular flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-semibold transition",
-                  isSel ? "bg-accent text-accent-text" : future ? "bg-surface/60 text-muted" : "bg-surface",
-                  d === t && !isSel && "ring-accent ring-1",
-                )}
-              >
-                {Number(d.slice(8))}
-              </span>
-              <span className="flex h-3 items-center">
-                {info?.training ? (
-                  <IconDumbbell width={11} height={11} className="text-protein" />
-                ) : (
-                  <span className={cx("h-1.5 w-1.5 rounded-full", info?.logged ? "bg-accent" : "bg-transparent")} />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** Choose automatic, training or rest for a day (today, past or upcoming). */
-function DayTypeSheet({ date, onClose, onChanged }: { date: string | null; onClose: () => void; onChanged: (d: string) => void }) {
-  const [plan, setPlan] = useState<{ date: string; dayType: "training" | "rest"; overridden: boolean; auto: "training" | "rest" } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!date) return;
-    let live = true;
-    getDayPlans(date, date).then(([p]) => {
-      if (live && p)
-        setPlan({
-          date,
-          dayType: p.dayType,
-          overridden: p.dayTypeOverridden,
-          auto: p.workouts.some((w) => w.type !== "rest") ? "training" : "rest",
-        });
-    });
-    return () => {
-      live = false;
-    };
-  }, [date]);
-  const current = plan && plan.date === date ? plan : null;
-  return (
-    <Sheet open={!!date} onClose={onClose} title={date ? `${friendlyDate(date)}${date > today() ? " — plan ahead" : ""}` : ""}>
-      {!current ? (
-        <div className="text-muted flex justify-center py-8">
-          <Spinner />
-        </div>
-      ) : (
-        <ChoiceCards<"auto" | "training" | "rest">
-          value={current.overridden ? current.dayType : "auto"}
-          onChange={async (v) => {
-            const d = current.date;
-            onClose();
-            await setDayType(d, v === "auto" ? null : v);
-            onChanged(d);
-          }}
-          options={[
-            {
-              value: "auto",
-              label: `Automatic (${current.auto} day)`,
-              hint: "Worked out from the workouts in your Plan",
-              icon: IconSparkles,
-            },
-            { value: "training", label: "Training day", hint: "More carbs to fuel your session", icon: IconDumbbell },
-            { value: "rest", label: "Rest day", hint: "Fewer carbs, same protein", icon: IconRest },
-          ]}
-        />
-      )}
-    </Sheet>
-  );
-}
-
 const grams = (n: number) => (n < 10 ? Math.round(n * 10) / 10 : Math.round(n));
 
 function MetricSection({
@@ -440,7 +249,7 @@ function MetricSection({
           <ul className="space-y-1">
             {top.map((e) => (
               <li key={e.id} className="flex items-baseline gap-3 text-[15px]">
-                <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                <span className="min-w-0 flex-1 truncate">{prettyName(e.name).title}</span>
                 <span className="tabular text-muted shrink-0">
                   {isEnergy ? formatEnergy(e.nutrients.energy_kj ?? 0, unit) : `${grams(e.nutrients[nkey] ?? 0)} g`}
                   <span className="text-muted/70"> · {SLOT_LABELS[e.slot]}</span>
