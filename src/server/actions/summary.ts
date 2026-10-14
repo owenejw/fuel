@@ -6,6 +6,8 @@ import { sumNutrients, type Nutrients } from "@/lib/nutrients";
 import type { DayTargets } from "@/lib/types";
 import { db } from "../db";
 import { dayPlans, getLog } from "../repo";
+import { weeklyMicros } from "../micros";
+import { microState } from "@/lib/nrv";
 import { requireProfileId } from "../session";
 
 const date = z.string().refine(isValidDate, "Invalid date");
@@ -38,7 +40,7 @@ export async function fetchSummary(d: string) {
   const pid = await requireProfileId();
   const day = date.parse(d);
   const q = await db();
-  const [days, logged, weights, activity] = await Promise.all([
+  const [days, logged, weights, activity, micros] = await Promise.all([
     week(pid, day),
     q.query<{ d: string }>(
       `select distinct to_char(date, 'YYYY-MM-DD') as d from log_entries where profile_id = $1 and date between $2 and $3 order by d desc`,
@@ -50,6 +52,7 @@ export async function fetchSummary(d: string) {
       day,
     ]),
     q.query<{ active_kj: number }>(`select active_kj from activity_days where profile_id = $1 and date = $2`, [pid, day]),
+    weeklyMicros(pid, day),
   ]);
   return {
     week: days,
@@ -57,5 +60,18 @@ export async function fetchSummary(d: string) {
     weights: weights.map((w) => ({ date: String(w.date).slice(0, 10), kg: Number(w.kg) })),
     /** Active energy burned today, from Apple Health (null if never synced). */
     activeKj: activity[0] ? Number(activity[0].active_kj) : null,
+    /** Vitamins and minerals under 70 % all week, and the number tracked. */
+    micros: {
+      low: micros.status.filter((m) => microState(m) === "low").length,
+      over: micros.status.filter((m) => microState(m) === "over").length,
+      tracked: micros.status.filter((m) => microState(m) !== "none").length,
+    },
   };
+}
+
+/** 7-day vitamin and mineral status for the Vitamins & minerals page. */
+export async function fetchMicros(end: string) {
+  const pid = await requireProfileId();
+  const { status, days } = await weeklyMicros(pid, date.parse(end));
+  return { status, daysLogged: days.filter((d) => d.count > 0).length };
 }

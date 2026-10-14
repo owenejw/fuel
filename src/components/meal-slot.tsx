@@ -1,82 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
-import { formatEnergy, type EnergyUnit } from "@/lib/energy";
-import type { NutrientTotals } from "@/lib/nutrients";
-import { SLOT_LABELS, type LogEntry, type MealSlot } from "@/lib/types";
-import { IconMore, IconPlus, IconTrash, SLOT_ICONS } from "./icons";
-import { IncompleteMark, MacroLine } from "./nutrition";
-import { Card, cx } from "./ui";
-
-export function MealSlotCard({
-  slot,
-  date,
-  entries,
-  totals,
-  unit,
-  onEntry,
-  onDelete,
-  onMenu,
-}: {
-  slot: MealSlot;
-  date: string;
-  entries: LogEntry[];
-  totals: NutrientTotals;
-  unit: EnergyUnit;
-  onEntry: (e: LogEntry) => void;
-  onDelete: (e: LogEntry) => void;
-  onMenu: () => void;
-}) {
-  const Icon = SLOT_ICONS[slot];
-  const addHref = `/log?slot=${slot}&date=${date}`;
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-3 py-1.5 pr-1 pl-3">
-        <span className="bg-surface-2 text-accent flex h-9 w-9 shrink-0 items-center justify-center rounded-full">
-          <Icon width={18} height={18} />
-        </span>
-        <h2 className="flex-1 font-semibold">{SLOT_LABELS[slot]}</h2>
-        {entries.length > 0 && (
-          <span className="tabular text-muted text-sm">
-            {formatEnergy(totals.totals.energy_kj ?? 0, unit)}
-            <IncompleteMark missing={totals.missing.energy_kj} />
-          </span>
-        )}
-        <button onClick={onMenu} className="text-muted rounded-full p-2.5" aria-label={`${SLOT_LABELS[slot]} options`}>
-          <IconMore width={20} height={20} />
-        </button>
-      </div>
-      {entries.length > 0 && (
-        <ul className="divide-border border-border divide-y border-t">
-          {entries.map((e) => (
-            <li key={e.id}>
-              <SwipeToDelete onDelete={() => onDelete(e)} label={`Delete ${e.name}`}>
-                <button onClick={() => onEntry(e)} className="active:bg-surface-2 flex w-full items-center gap-3 px-4 py-2.5 text-left">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{e.name}</div>
-                    <MacroLine n={e.nutrients} unit={unit} />
-                  </div>
-                  <span className="tabular text-muted shrink-0 text-sm">{e.grams ? `${Math.round(e.grams)} g` : "quick"}</span>
-                </button>
-              </SwipeToDelete>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Link
-        href={addHref}
-        className={cx(
-          "text-accent active:bg-surface-2 flex items-center gap-2 px-4 py-2.5 text-sm font-medium",
-          entries.length > 0 && "border-border border-t",
-        )}
-      >
-        <IconPlus width={16} height={16} />
-        Add {entries.length > 0 ? "more" : `to ${SLOT_LABELS[slot].toLowerCase()}`}
-      </Link>
-    </Card>
-  );
-}
+import { IconTrash } from "./icons";
+import { cx } from "./ui";
 
 const REVEAL = 88;
 

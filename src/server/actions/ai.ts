@@ -224,3 +224,20 @@ export async function readNutritionPanel(imageDataUrl: string): Promise<PanelRea
     `Extract values from a food nutrition information panel (usually Australian/NZ format). Return the per 100 g (or per 100 mL) column. If only per-serve values are printed, convert using the serving size. Energy in kJ (convert from Cal/kcal × 4.184 only if kJ is absent). Sodium in mg. Use null for anything not printed — never guess or use 0 for a missing row.`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Typed or spoken description → itemised estimate
+// ---------------------------------------------------------------------------
+
+export async function estimateFromText(text: string): Promise<PlateEstimate> {
+  const said = z.string().trim().min(2).max(600).parse(text);
+  return ask(
+    PlateSchema,
+    obj({
+      items: arr(obj({ name: str, grams: num, energy_kj: num, protein_g: num, carbs_g: num, fat_g: num, fibre_g: nullable(num) })),
+      notes: str,
+    }),
+    `What I ate: ${said}`,
+    `You turn a casual description of food someone ate into itemised entries for an Australian nutrition tracker. Split it into separate foods and drinks. For each, give a short clear name (e.g. "Scrambled eggs", "Flat white, full cream milk"), a realistic edible weight in grams for the amount described (use typical Australian serves when no amount is given, e.g. a slice of bread ≈ 35 g, a flat white ≈ 220 g), and the energy (kJ), protein, carbohydrate, fat and fibre for that amount using Australian (AFCD) composition values. Include spreads, oils, milk and sauces that are mentioned. In notes, say briefly what you assumed.`,
+  );
+}

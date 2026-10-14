@@ -16,7 +16,7 @@ import { db, json, type Row } from "./db";
 // ---------------------------------------------------------------------------
 
 const PROFILE_COLS = `id, name, sex, birth_date, height_cm, activity_level, goal, energy_unit, training_days_per_week, ai_enabled,
-  calendar_ics_url, calendar_keywords, calendar_synced_at, remind_log_time, remind_workouts`;
+  calendar_ics_url, calendar_keywords, calendar_synced_at, remind_log_time, remind_workouts, water_bottles, avatar_emoji, avatar_color`;
 
 export async function getProfile(id: string): Promise<Profile | null> {
   const rows = await (await db()).query<Profile>(`select ${PROFILE_COLS} from profiles where id = $1`, [id]);

@@ -78,6 +78,13 @@ export function fluidTargetMl(sex: Sex | null) {
 
 export const LOW_THRESHOLD = 0.7;
 
+/** How a nutrient is going this week: under 70 % of target on average, over a limit, or fine. */
+export function microState(m: Pick<MicroStatus, "average" | "target" | "limit">): "low" | "over" | "ok" | "none" {
+  if (m.average == null) return "none";
+  if (m.limit) return m.average > m.target ? "over" : "ok";
+  return m.average < m.target * 0.7 ? "low" : "ok";
+}
+
 export type MicroStatus = {
   key: NutrientKey;
   target: number;

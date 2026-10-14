@@ -135,16 +135,29 @@ export function BigStat({
   );
 }
 
-/** Round initial in the top corner; opens Settings. */
+/** Emoji on a colour, or the first initial on a gradient. */
+export function Avatar({ name, emoji, color, size = 40 }: { name: string; emoji: string | null; color: string | null; size?: number }) {
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white shadow-md"
+      style={{
+        width: size,
+        height: size,
+        fontSize: emoji ? size * 0.55 : size * 0.45,
+        background: color ?? "linear-gradient(135deg, #7d7aff, #5e5ce6)",
+      }}
+    >
+      {emoji || name.trim().slice(0, 1).toUpperCase() || "?"}
+    </span>
+  );
+}
+
+/** Profile picture in the top corner; opens your account. */
 export function AvatarLink() {
   const { profile } = useApp();
   return (
-    <Link
-      href="/settings"
-      aria-label="Settings"
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#7d7aff] to-[#5e5ce6] text-lg font-semibold text-white shadow-md active:scale-95"
-    >
-      {profile.name.trim().slice(0, 1).toUpperCase() || "?"}
+    <Link href="/settings" aria-label="Account" className="shrink-0 rounded-full active:scale-95">
+      <Avatar name={profile.name} emoji={profile.avatar_emoji} color={profile.avatar_color} />
     </Link>
   );
 }
@@ -214,19 +227,27 @@ export function EnergyCard({
   unit,
   footer,
   size = 132,
+  onSelect,
 }: {
   totals: Nutrients;
   targets: DayTargets;
   unit: EnergyUnit;
   footer?: ReactNode;
   size?: number;
+  /** When set, the ring and each row become buttons. */
+  onSelect?: (metric: "energy" | "protein" | "carbs" | "fat" | "fibre") => void;
 }) {
   const eaten = totals.energy_kj ?? 0;
   const left = targets.energy_kj - eaten;
   return (
     <>
       <div className="flex items-center gap-4">
-        <div className="relative shrink-0">
+        <div
+          className={cx("relative shrink-0", onSelect && "cursor-pointer transition active:scale-95")}
+          onClick={onSelect && (() => onSelect("energy"))}
+          role={onSelect ? "button" : undefined}
+          aria-label={onSelect ? "Energy details" : undefined}
+        >
           <Rings size={size} stroke={13} rings={[{ ...METRIC.energy, value: eaten, target: targets.energy_kj }]} />
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <IconEnergy width={16} height={16} style={{ color: METRIC.energy.color }} />
@@ -245,8 +266,13 @@ export function EnergyCard({
             const t = targets[r.key];
             const diff = Math.round(t - v);
             const pct = t > 0 ? Math.min(100, (v / t) * 100) : 0;
+            const Row = onSelect ? "button" : "div";
             return (
-              <div key={r.key}>
+              <Row
+                key={r.key}
+                {...(onSelect ? { type: "button" as const, onClick: () => onSelect(r.metric) } : {})}
+                className={cx("block w-full text-left", onSelect && "-mx-1.5 rounded-xl px-1.5 py-0.5 active:bg-white/5")}
+              >
                 <div className="flex items-baseline gap-1.5 text-[13px]">
                   <r.Icon width={13} height={13} className="self-center" style={{ color: m.color }} />
                   <span className="flex-1">{m.label}</span>
@@ -264,7 +290,7 @@ export function EnergyCard({
                 <div className={cx("tabular mt-0.5 text-right text-[11px]", diff < 0 && !r.overOk ? "text-danger" : "text-muted")}>
                   {diff >= 0 ? `${diff} g left` : `${-diff} g over`}
                 </div>
-              </div>
+              </Row>
             );
           })}
         </div>

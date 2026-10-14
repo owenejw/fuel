@@ -12,18 +12,32 @@ import { formatAmount, nutrientDef } from "@/lib/nutrients";
 import { WORKOUT_LABELS } from "@/lib/types";
 import { deleteWeight, fetchWeights, getGoalContext, saveGoal, saveWeight } from "@/server/actions/plan";
 import { getTrends, type Trends } from "@/server/actions/trends";
+import { cacheGet, cacheSet } from "@/lib/offline";
 
 type Tab = "week" | "micros" | "weight" | "summary";
 
 const dayLabel = (d: string) => parseDate(d).toLocaleDateString("en-AU", { weekday: "short" });
 
 export function TrendsView() {
-  const { unit } = useApp();
+  const { unit, profileId } = useApp();
   const [end, setEnd] = useState(today());
   const [tab, setTab] = useState<Tab>("week");
-  const [data, setData] = useState<Trends | null>(null);
+  // Show the last copy for this week straight away, then refresh it.
+  const [cached, setCached] = useState<{ end: string; data: Trends | null }>(() => ({
+    end,
+    data: cacheGet<Trends>(profileId, `trends:${end}`),
+  }));
+  if (cached.end !== end) setCached({ end, data: cacheGet<Trends>(profileId, `trends:${end}`) });
+  const data = cached.end === end ? cached.data : null;
+  const setData = useCallback(
+    (d: Trends) => {
+      setCached({ end, data: d });
+      cacheSet(profileId, `trends:${end}`, d);
+    },
+    [end, profileId],
+  );
 
-  const load = useCallback(() => getTrends(end).then(setData, () => undefined), [end]);
+  const load = useCallback(() => getTrends(end).then(setData, () => undefined), [end, setData]);
   useEffect(() => {
     load();
   }, [load]);

@@ -1,13 +1,13 @@
 import { Suspense } from "react";
-import { DiaryView } from "./diary-view";
+import { MealsView } from "./meals-view";
 
 // Rendered on the client from the device's chosen profile; nothing to prerender.
 export const instant = false;
 
-export default function DiaryPage() {
+export default function MealsPage() {
   return (
     <Suspense>
-      <DiaryView />
+      <MealsView />
     </Suspense>
   );
 }

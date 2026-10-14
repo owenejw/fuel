@@ -28,12 +28,14 @@ import {
   Flame,
   Footprints,
   Globe,
+  LayoutGrid,
   HeartPulse,
   HardHat,
   House,
   Leaf,
   Lightbulb,
   Mars,
+  Mic,
   Minus,
   Moon,
   Pencil,
@@ -159,3 +161,5 @@ export const IconMoon: Icon = Moon;
 export const IconDumbbell: Icon = Dumbbell;
 export const IconRest: Icon = Armchair;
 export const IconHeart: Icon = HeartPulse;
+export const IconGrid: Icon = LayoutGrid;
+export const IconMic: Icon = Mic;

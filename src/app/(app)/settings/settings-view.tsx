@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/app-provider";
 import { ProfileFields, type ProfileDraft } from "@/components/profile-fields";
 import { useToast } from "@/components/toast";
-import { Button, Card, Input, PageHeader, SectionTitle, Toggle } from "@/components/ui";
+import { Button, Card, Input, PageHeader, Toggle, cx } from "@/components/ui";
 import Link from "next/link";
 import {
   IconBell,
   IconCopy,
   IconHeart,
   IconChevronLeft,
+  IconChevronRight,
+  IconRuler,
+  IconScale,
   IconCalendarSync,
   IconCarbs,
   IconDownload,
@@ -18,38 +21,47 @@ import {
   IconEnergy,
   IconFat,
   IconFibre,
-  IconPhone,
   IconProtein,
   IconRest,
   IconSparkles,
   IconTarget,
-  IconToday,
   IconUsers,
   type Icon,
 } from "@/components/icons";
 import { fromUnit, formatEnergy, toUnit, unitLabel } from "@/lib/energy";
 import { PROTEIN_G_PER_KG } from "@/lib/tdee";
 import type { DayTargets, Profile } from "@/lib/types";
-import { saveProfile } from "@/server/actions/profile";
+import { saveAvatar, saveProfile } from "@/server/actions/profile";
+import { Avatar } from "@/components/summary";
 import { createHealthKey, getHealthStatus } from "@/server/actions/health";
 import { aiAvailable } from "@/server/actions/ai";
 import { getGoalContext, saveGoal, syncCalendar, type GoalContext } from "@/server/actions/plan";
 import { removePushSubscription, savePushSubscription } from "@/server/actions/push";
 
-function Section({ id, title, icon, children }: { id?: string; title: string; icon: Icon; children: React.ReactNode }) {
-  return (
-    <section id={id} className="scroll-mt-16">
-      <SectionTitle icon={icon}>{title}</SectionTitle>
-      {children}
-    </section>
-  );
+function Section({ children }: { id?: string; title?: string; icon?: Icon; children: React.ReactNode }) {
+  return <section>{children}</section>;
 }
 
-export function SettingsView() {
+export type SettingsPage =
+  "profile" | "health-details" | "goals" | "units" | "notifications" | "apple-health" | "calendar" | "meal-ideas" | "export";
+
+const TITLES: Record<SettingsPage, string> = {
+  profile: "Profile",
+  "health-details": "Health details",
+  goals: "Goals & targets",
+  units: "Units",
+  notifications: "Notifications",
+  "apple-health": "Apple Health",
+  calendar: "Google Calendar",
+  "meal-ideas": "Meal ideas & photo logging",
+  export: "Export data",
+};
+
+/** Settings home (Apple-style account list), or one of its pages. */
+export function SettingsView({ page }: { page?: SettingsPage }) {
   const { profile, setProfile, switchProfile } = useApp();
   const toast = useToast();
 
-  /** Save a partial change to the profile. */
   /** Optimistic: switches and choices change on screen immediately, then save. */
   const save = async (patch: Partial<Profile>) => {
     const before = profile;
@@ -65,76 +77,296 @@ export function SettingsView() {
     }
   };
 
+  if (page)
+    return (
+      <>
+        <PageHeader
+          title={<span className="text-lg font-semibold">{TITLES[page]}</span>}
+          left={
+            <Link
+              href="/settings"
+              className="bg-surface -ml-1 flex h-10 w-10 items-center justify-center rounded-full active:scale-95"
+              aria-label="Back to account"
+            >
+              <IconChevronLeft width={22} height={22} />
+            </Link>
+          }
+        />
+        <div className="space-y-4 px-4 pb-6">
+          {page === "profile" && <AvatarAndName profile={profile} save={save} />}
+          {page === "health-details" && (
+            <FieldsForm
+              profile={profile}
+              save={save}
+              fields={["sex", "birth_date", "height_cm", "activity_level", "training_days_per_week"]}
+            />
+          )}
+          {page === "goals" && (
+            <>
+              <FieldsForm profile={profile} save={save} fields={["goal"]} auto />
+              <TargetsSection />
+            </>
+          )}
+          {page === "units" && <FieldsForm profile={profile} save={save} fields={["energy_unit"]} auto />}
+          {page === "notifications" && <RemindersSection profile={profile} save={save} />}
+          {page === "apple-health" && <HealthSection />}
+          {page === "calendar" && <CalendarSection profile={profile} save={save} />}
+          {page === "meal-ideas" && <AiSection profile={profile} save={save} />}
+          {page === "export" && (
+            <Card className="divide-border divide-y">
+              {(["logs", "weights", "workouts"] as const).map((t) => (
+                <a key={t} href={`/api/export?type=${t}`} className="text-accent flex items-center gap-2 px-4 py-3.5">
+                  <IconDownload width={18} height={18} /> Download {t} (CSV)
+                </a>
+              ))}
+            </Card>
+          )}
+        </div>
+      </>
+    );
+
   return (
     <>
       <PageHeader
-        title="Settings"
+        title="Account"
         left={
-          <Link href="/" className="bg-surface -ml-1 flex h-10 w-10 items-center justify-center rounded-full" aria-label="Back to Today">
+          <Link
+            href="/"
+            className="bg-surface -ml-1 flex h-10 w-10 items-center justify-center rounded-full active:scale-95"
+            aria-label="Back to Today"
+          >
             <IconChevronLeft width={22} height={22} />
           </Link>
         }
       />
-      <div className="space-y-6 px-4 pb-6">
-        <ProfileSection profile={profile} save={save} />
-        <TargetsSection />
-        <AiSection profile={profile} save={save} />
-        <HealthSection />
-        <CalendarSection profile={profile} save={save} />
-        <RemindersSection profile={profile} save={save} />
-        <Section title="Export" icon={IconDownload}>
-          <Card className="divide-border divide-y">
-            {(["logs", "weights", "workouts"] as const).map((t) => (
-              <a key={t} href={`/api/export?type=${t}`} className="text-accent flex items-center gap-2 px-4 py-3 text-sm">
-                <IconDownload width={16} height={16} /> Download {t} (CSV)
-              </a>
-            ))}
-          </Card>
-        </Section>
-        <Section title="This device" icon={IconPhone}>
-          <Card className="divide-border divide-y">
-            <div className="px-4 py-3 text-sm">
-              This device is using <span className="font-medium">{profile.name}</span>&apos;s profile.
-            </div>
-            <button onClick={switchProfile} className="text-accent flex w-full items-center gap-2 px-4 py-3 text-left text-sm">
-              <IconUsers width={16} height={16} /> Switch profile
-            </button>
-          </Card>
-        </Section>
+      <div className="space-y-5 px-4 pb-6">
+        <Link href="/settings/profile" className="bg-surface flex items-center gap-4 rounded-3xl p-4 active:scale-[0.98]">
+          <Avatar name={profile.name} emoji={profile.avatar_emoji} color={profile.avatar_color} size={64} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xl font-semibold">{profile.name}</span>
+            <span className="text-muted block text-sm">Profile picture and name</span>
+          </span>
+          <IconChevronRight width={20} height={20} className="text-muted" />
+        </Link>
+
+        <RowGroup>
+          <Row href="/settings/health-details" icon={IconRuler} color="var(--carbs)" label="Health details" />
+          <Row href="/settings/goals" icon={IconTarget} color="var(--energy)" label="Goals & targets" />
+          <Row
+            href="/settings/units"
+            icon={IconScale}
+            color="var(--fat)"
+            label="Units"
+            value={profile.energy_unit === "kj" ? "kJ" : "kcal"}
+          />
+        </RowGroup>
+
+        <RowGroup>
+          <Row href="/settings/notifications" icon={IconBell} color="var(--danger)" label="Notifications" />
+          <Row href="/settings/apple-health" icon={IconHeart} color="var(--energy)" label="Apple Health" />
+          <Row href="/settings/calendar" icon={IconCalendarSync} color="var(--water)" label="Google Calendar" />
+          <Row
+            href="/settings/meal-ideas"
+            icon={IconSparkles}
+            color="var(--fibre)"
+            label="Meal ideas & photo logging"
+            value={profile.ai_enabled ? "On" : "Off"}
+          />
+        </RowGroup>
+
+        <RowGroup>
+          <Row href="/settings/export" icon={IconDownload} color="var(--muted)" label="Export data" />
+          <button onClick={switchProfile} className="text-accent flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-white/5">
+            <IconUsers width={20} height={20} />
+            <span className="flex-1">Switch profile</span>
+          </button>
+        </RowGroup>
+        <p className="text-muted text-center text-xs">This device is using {profile.name}&apos;s profile.</p>
       </div>
     </>
   );
 }
 
+function RowGroup({ children }: { children: React.ReactNode }) {
+  return <div className="bg-surface divide-border divide-y overflow-hidden rounded-3xl">{children}</div>;
+}
+
+function Row({ href, icon: RowIcon, color, label, value }: { href: string; icon: Icon; color: string; label: string; value?: string }) {
+  return (
+    <Link href={href} className="flex items-center gap-3 px-4 py-3.5 active:bg-white/5">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white" style={{ background: color }}>
+        <RowIcon width={17} height={17} />
+      </span>
+      <span className="flex-1">{label}</span>
+      {value && <span className="text-muted text-sm">{value}</span>}
+      <IconChevronRight width={18} height={18} className="text-muted" />
+    </Link>
+  );
+}
+
 type SaveFn = (patch: Partial<Profile>) => Promise<Profile>;
 
-function ProfileSection({ profile, save }: { profile: Profile; save: SaveFn }) {
+/** Profile fields with a Save button, or saving as soon as something changes (`auto`). */
+function FieldsForm({
+  profile,
+  save,
+  fields,
+  auto,
+}: {
+  profile: Profile;
+  save: SaveFn;
+  fields: Parameters<typeof ProfileFields>[0]["fields"];
+  auto?: boolean;
+}) {
   const toast = useToast();
   const [draft, setDraft] = useState<ProfileDraft>({ ...profile });
   const [busy, setBusy] = useState(false);
   return (
-    <Section title="Profile" icon={IconToday}>
+    <Card className="p-4">
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          try {
+            await save(draft);
+            toast("Saved");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <ProfileFields
+          value={draft}
+          fields={fields}
+          onChange={(d) => {
+            setDraft(d);
+            if (auto) save(d).catch(() => undefined);
+          }}
+        />
+        {!auto && (
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        )}
+      </form>
+    </Card>
+  );
+}
+
+const EMOJIS = [
+  "😀",
+  "😎",
+  "🤓",
+  "🥳",
+  "🤠",
+  "👻",
+  "🦊",
+  "🐻",
+  "🐼",
+  "🐨",
+  "🐯",
+  "🦁",
+  "🐸",
+  "🐵",
+  "🦄",
+  "🐙",
+  "🦖",
+  "🐳",
+  "⚽",
+  "🏃",
+  "🏋️",
+  "🚴",
+  "🏊",
+  "🧗",
+  "🥑",
+  "🍌",
+  "🍓",
+  "🌮",
+  "🍕",
+  "☕",
+  "🔥",
+  "⚡",
+  "🌈",
+  "⭐",
+  "🌊",
+  "🏔️",
+];
+const COLOURS = ["#ff2d55", "#ff9500", "#ffcc00", "#34c759", "#30d5c8", "#0a84ff", "#5e5ce6", "#bf5af2", "#ff6482", "#8e8e93"];
+
+function AvatarAndName({ profile, save }: { profile: Profile; save: SaveFn }) {
+  const { setProfile } = useApp();
+  const toast = useToast();
+  const [name, setName] = useState(profile.name);
+  const setAvatar = (emoji: string | null, color: string | null) => {
+    const before = profile;
+    setProfile({ ...profile, avatar_emoji: emoji, avatar_color: color });
+    saveAvatar({ emoji, color }).then(setProfile, () => {
+      setProfile(before);
+      toast("Couldn't save — try again");
+    });
+  };
+  const colour = profile.avatar_color ?? COLOURS[6];
+  return (
+    <>
+      <div className="flex flex-col items-center gap-3 py-2">
+        <Avatar name={profile.name} emoji={profile.avatar_emoji} color={profile.avatar_color} size={104} />
+        {profile.avatar_emoji && (
+          <button onClick={() => setAvatar(null, null)} className="text-accent text-sm">
+            Use my initial instead
+          </button>
+        )}
+      </div>
+      <Card className="p-4">
+        <div className="text-muted mb-2 text-sm">Background</div>
+        <div className="flex flex-wrap gap-2.5">
+          {COLOURS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setAvatar(profile.avatar_emoji ?? EMOJIS[0], c)}
+              className={cx(
+                "h-9 w-9 rounded-full transition active:scale-90",
+                colour === c && profile.avatar_color && "ring-2 ring-white ring-offset-2 ring-offset-[var(--surface)]",
+              )}
+              style={{ background: c }}
+              aria-label={`Colour ${c}`}
+            />
+          ))}
+        </div>
+        <div className="text-muted mt-4 mb-2 text-sm">Emoji</div>
+        <div className="grid grid-cols-6 gap-1.5">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => setAvatar(e, colour)}
+              className={cx(
+                "flex aspect-square items-center justify-center rounded-xl text-2xl transition active:scale-90",
+                profile.avatar_emoji === e ? "bg-white/15" : "bg-surface-2",
+              )}
+              aria-label={`Use ${e}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      </Card>
       <Card className="p-4">
         <form
-          className="space-y-4"
+          className="flex items-end gap-2"
           onSubmit={async (e) => {
             e.preventDefault();
-            setBusy(true);
-            try {
-              await save(draft);
-              toast("Profile saved");
-            } finally {
-              setBusy(false);
-            }
+            if (!name.trim()) return;
+            await save({ name: name.trim() });
+            toast("Name saved");
           }}
         >
-          <ProfileFields value={draft} onChange={setDraft} />
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Saving…" : "Save profile"}
+          <Input className="flex-1" label="Name" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+          <Button type="submit" variant="secondary" disabled={name.trim() === profile.name}>
+            Save
           </Button>
         </form>
       </Card>
-    </Section>
+    </>
   );
 }
 

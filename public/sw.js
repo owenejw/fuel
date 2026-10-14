@@ -7,7 +7,7 @@
 const VERSION = "v4";
 const SHELL = `shell-${VERSION}`;
 const STATIC = `static-${VERSION}`;
-const PRECACHE = ["/", "/diary", "/log", "/offline", "/manifest.webmanifest", "/icons/icon-192.png"];
+const PRECACHE = ["/", "/meals", "/log", "/offline", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
