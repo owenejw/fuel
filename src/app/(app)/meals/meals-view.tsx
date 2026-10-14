@@ -5,13 +5,25 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/components/app-provider";
 import { EntrySheet } from "@/components/entry-sheet";
-import { IconBolt, IconBookmark, IconChevronLeft, IconChevronRight, IconCopy, IconTrash, type Icon } from "@/components/icons";
-import { MealSlotCard } from "@/components/meal-slot";
+import {
+  IconBolt,
+  IconBookmark,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCopy,
+  IconGrid,
+  IconMore,
+  IconPlus,
+  IconTrash,
+  SLOT_ICONS,
+  type Icon,
+} from "@/components/icons";
+import { SwipeToDelete } from "@/components/meal-slot";
 import { MacroLine } from "@/components/nutrition";
 import { QuickAddSheet } from "@/components/quick-add-sheet";
 import { METRIC, type MetricKey } from "@/components/rings";
 import { useToast } from "@/components/toast";
-import { Button, Card, Input, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
+import { Button, Input, PageHeader, Sheet, Spinner, cx } from "@/components/ui";
 import { copyEntries, entryToNew, fetchRecentMeals, saveMeal } from "@/lib/data";
 import { addDays, friendlyDate, isValidDate, today } from "@/lib/dates";
 import { formatEnergy, type EnergyUnit } from "@/lib/energy";
@@ -22,7 +34,7 @@ import { MEAL_SLOTS, SLOT_LABELS, type DayTargets, type LogEntry, type MealSlot 
 
 const CORE_SLOTS: MealSlot[] = ["breakfast", "lunch", "dinner", "snack"];
 
-export function DiaryView() {
+export function MealsView() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -44,7 +56,7 @@ export function DiaryView() {
   const dayTotals = useMemo(() => combineTotals([...slotTotals.values()]), [slotTotals]);
   const visibleSlots = MEAL_SLOTS.filter((s) => CORE_SLOTS.includes(s) || bySlot.get(s)!.length > 0);
 
-  const go = (d: string) => router.replace(d === today() ? "/diary" : `/diary?date=${d}`, { scroll: false });
+  const go = (d: string) => router.replace(d === today() ? "/meals" : `/meals?date=${d}`, { scroll: false });
 
   async function handleDelete(ids: string[]) {
     const removed = await remove(ids);
@@ -71,64 +83,111 @@ export function DiaryView() {
     }
   }
 
+  const [tab, setTab] = useState<"overview" | MealSlot>("overview");
+  const tabs: ("overview" | MealSlot)[] = ["overview", ...visibleSlots];
+  const onEntry = (e: LogEntry) => (e.kind === "quick" ? setQuick({ slot: e.slot, entry: e }) : setEditing(e));
+
   return (
     <>
       <PageHeader
-        left={
-          <button onClick={() => go(addDays(date, -1))} className="-ml-2 rounded-full p-2" aria-label="Previous day">
-            <IconChevronLeft />
-          </button>
-        }
-        title={
-          <span className="flex items-center gap-1 text-base">
-            {friendlyDate(date)}
-            <button onClick={() => go(addDays(date, 1))} className="rounded-full p-2" aria-label="Next day">
-              <IconChevronRight />
-            </button>
-          </span>
-        }
+        title="Meals"
         right={
           <button
-            onClick={() => setQuick({ slot: defaultSlot() })}
-            className="bg-surface-2 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium"
+            onClick={() => setQuick({ slot: tab === "overview" ? defaultSlot() : tab })}
+            className="bg-surface flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium active:scale-95"
           >
             <IconBolt width={16} height={16} className="text-accent" /> Quick add
           </button>
         }
       />
 
-      <div className="space-y-3 px-4">
-        {offline && <p className="bg-surface-2 text-muted rounded-xl px-3 py-2 text-sm">Offline — showing your saved copy.</p>}
-        {day && <DiaryTotals totals={dayTotals.totals} targets={day.plan.targets} unit={unit} date={date} />}
+      <div className="flex items-center justify-between px-2">
+        <button onClick={() => go(addDays(date, -1))} className="text-muted rounded-full p-2 active:scale-90" aria-label="Previous day">
+          <IconChevronLeft />
+        </button>
+        <span className="text-[15px] font-semibold">
+          {friendlyDate(date)}
+          {["Today", "Yesterday", "Tomorrow"].includes(friendlyDate(date)) && (
+            <span className="text-muted font-normal">
+              {" · "}
+              {new Date(date + "T00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" })}
+            </span>
+          )}
+        </span>
+        <button onClick={() => go(addDays(date, 1))} className="text-muted rounded-full p-2 active:scale-90" aria-label="Next day">
+          <IconChevronRight />
+        </button>
+      </div>
 
-        {loading ? (
+      <div className="bg-bg/85 sticky top-[calc(env(safe-area-inset-top)+4rem)] z-10 -mt-1 py-2 backdrop-blur-xl">
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4" role="tablist">
+          {tabs.map((t) => {
+            const on = t === tab;
+            const SlotIcon = t === "overview" ? IconGrid : SLOT_ICONS[t];
+            const kj = t === "overview" ? null : slotTotals.get(t)!.totals.energy_kj;
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={on}
+                onClick={() => setTab(t)}
+                className={cx(
+                  "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition active:scale-95",
+                  on ? "bg-text text-bg" : "bg-surface text-text",
+                )}
+              >
+                <SlotIcon width={16} height={16} />
+                {t === "overview" ? "Overview" : SLOT_LABELS[t]}
+                {kj ? (
+                  <span className={cx("tabular text-xs font-medium", on ? "opacity-60" : "text-muted")}>
+                    {formatEnergy(kj, unit, { label: false })}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div key={`${date}:${tab}`} className="page-in space-y-3 px-4 pt-1">
+        {offline && <p className="bg-surface-2 text-muted rounded-xl px-3 py-2 text-sm">Offline — showing your saved copy.</p>}
+        {loading || !day ? (
           <div className="text-muted flex justify-center py-10">
             <Spinner />
           </div>
-        ) : (
+        ) : tab === "overview" ? (
           <>
-            {entries!.length === 0 && (
-              <Card className="flex items-center justify-between gap-3 p-4">
-                <span className="text-muted text-sm">Nothing logged {date === today() ? "yet today" : "this day"}.</span>
-                <Button size="sm" variant="secondary" className="shrink-0 whitespace-nowrap" onClick={() => copyFromYesterday()}>
-                  <IconCopy width={16} height={16} /> Copy yesterday
-                </Button>
-              </Card>
-            )}
+            <MealsTotals totals={dayTotals.totals} targets={day.plan.targets} unit={unit} date={date} />
+            <h2 className="pt-2 text-xl font-bold">By meal</h2>
             {visibleSlots.map((slot) => (
-              <MealSlotCard
+              <MealSummaryCard
                 key={slot}
                 slot={slot}
                 date={date}
-                entries={bySlot.get(slot)!}
-                totals={slotTotals.get(slot)!}
+                count={bySlot.get(slot)!.length}
+                totals={slotTotals.get(slot)!.totals}
                 unit={unit}
-                onEntry={(e) => (e.kind === "quick" ? setQuick({ slot: e.slot, entry: e }) : setEditing(e))}
-                onDelete={(e) => handleDelete([e.id])}
-                onMenu={() => setMenuSlot(slot)}
+                onOpen={() => setTab(slot)}
               />
             ))}
+            {entries!.length === 0 && (
+              <Button variant="secondary" className="w-full" onClick={() => copyFromYesterday()}>
+                <IconCopy width={16} height={16} /> Copy yesterday&apos;s meals
+              </Button>
+            )}
           </>
+        ) : (
+          <MealDetail
+            slot={tab}
+            date={date}
+            entries={bySlot.get(tab)!}
+            totals={slotTotals.get(tab)!.totals}
+            unit={unit}
+            onEntry={onEntry}
+            onDelete={(e) => handleDelete([e.id])}
+            onQuick={() => setQuick({ slot: tab })}
+            onMenu={() => setMenuSlot(tab)}
+          />
         )}
       </div>
 
@@ -341,7 +400,7 @@ function MenuItem({
 }
 
 /** One line of colour-coded totals; tap for the full breakdown. */
-function DiaryTotals({ totals, targets, unit, date }: { totals: Nutrients; targets: DayTargets; unit: EnergyUnit; date: string }) {
+function MealsTotals({ totals, targets, unit, date }: { totals: Nutrients; targets: DayTargets; unit: EnergyUnit; date: string }) {
   const items: [MetricKey, number, number, string][] = [
     ["protein", totals.protein_g ?? 0, targets.protein_g, "P"],
     ["carbs", totals.carbs_g ?? 0, targets.carbs_g, "C"],
@@ -365,5 +424,163 @@ function DiaryTotals({ totals, targets, unit, date }: { totals: Nutrients; targe
       </div>
       <IconChevronRight width={20} height={20} className="text-muted" />
     </Link>
+  );
+}
+
+const MACRO_CHIPS: [MetricKey, "protein_g" | "carbs_g" | "fat_g", string][] = [
+  ["protein", "protein_g", "Protein"],
+  ["carbs", "carbs_g", "Carbs"],
+  ["fat", "fat_g", "Fat"],
+];
+
+function MacroChips({ totals }: { totals: Nutrients }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {MACRO_CHIPS.map(([m, k, l]) => (
+        <span
+          key={k}
+          className="tabular rounded-full px-2.5 py-1 text-xs font-semibold"
+          style={{ color: METRIC[m].color, background: `color-mix(in srgb, ${METRIC[m].color} 14%, transparent)` }}
+        >
+          {l} {Math.round(totals[k] ?? 0)} g
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** One meal on the overview: tap to open it, or + to add to it. */
+function MealSummaryCard({
+  slot,
+  date,
+  count,
+  totals,
+  unit,
+  onOpen,
+}: {
+  slot: MealSlot;
+  date: string;
+  count: number;
+  totals: Nutrients;
+  unit: EnergyUnit;
+  onOpen: () => void;
+}) {
+  const SlotIcon = SLOT_ICONS[slot];
+  return (
+    <div className="bg-surface flex items-center gap-3 rounded-3xl p-4">
+      <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
+        <span className="bg-surface-2 text-accent flex h-12 w-12 shrink-0 items-center justify-center rounded-full">
+          <SlotIcon width={22} height={22} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[17px] font-semibold">{SLOT_LABELS[slot]}</span>
+          {count ? (
+            <>
+              <span className="tabular text-energy block text-[22px] leading-tight font-bold">
+                {formatEnergy(totals.energy_kj ?? 0, unit, { label: false })}
+                <span className="ml-0.5 text-sm font-semibold">{unit === "kj" ? "kJ" : "kcal"}</span>
+                <span className="text-muted ml-2 text-xs font-normal">
+                  {count} food{count === 1 ? "" : "s"}
+                </span>
+              </span>
+              <span className="mt-1.5 block">
+                <MacroChips totals={totals} />
+              </span>
+            </>
+          ) : (
+            <span className="text-muted block text-sm">Nothing yet</span>
+          )}
+        </span>
+      </button>
+      <Link
+        href={`/log?slot=${slot}&date=${date}`}
+        className="bg-accent text-accent-text flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-90"
+        aria-label={`Add to ${SLOT_LABELS[slot]}`}
+      >
+        <IconPlus width={20} height={20} strokeWidth={2.6} />
+      </Link>
+    </div>
+  );
+}
+
+/** One meal's tab: its totals, actions, and the foods in it. */
+function MealDetail({
+  slot,
+  date,
+  entries,
+  totals,
+  unit,
+  onEntry,
+  onDelete,
+  onQuick,
+  onMenu,
+}: {
+  slot: MealSlot;
+  date: string;
+  entries: LogEntry[];
+  totals: Nutrients;
+  unit: EnergyUnit;
+  onEntry: (e: LogEntry) => void;
+  onDelete: (e: LogEntry) => void;
+  onQuick: () => void;
+  onMenu: () => void;
+}) {
+  return (
+    <>
+      <div className="bg-surface rounded-3xl p-4">
+        <div className="text-[15px]">{SLOT_LABELS[slot]}</div>
+        <div className="tabular text-energy text-[34px] leading-tight font-bold">
+          {formatEnergy(totals.energy_kj ?? 0, unit, { label: false })}
+          <span className="ml-0.5 text-lg font-semibold">{unit === "kj" ? "kJ" : "kcal"}</span>
+        </div>
+        <div className="mt-2">
+          <MacroChips totals={totals} />
+        </div>
+        <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">
+          <Link
+            href={`/log?slot=${slot}&date=${date}`}
+            className="bg-accent text-accent-text flex h-11 items-center justify-center gap-1.5 rounded-full font-semibold active:scale-[0.97]"
+          >
+            <IconPlus width={18} height={18} strokeWidth={2.6} /> Add food
+          </Link>
+          <button
+            onClick={onQuick}
+            className="bg-surface-2 flex h-11 items-center gap-1.5 rounded-full px-4 text-sm font-semibold active:scale-95"
+          >
+            <IconBolt width={16} height={16} className="text-accent" /> kJ
+          </button>
+          <button
+            onClick={onMenu}
+            className="bg-surface-2 flex h-11 w-11 items-center justify-center rounded-full active:scale-95"
+            aria-label="More options"
+          >
+            <IconMore width={20} height={20} />
+          </button>
+        </div>
+      </div>
+      {entries.length > 0 ? (
+        <>
+          <h2 className="pt-2 text-xl font-bold">Foods</h2>
+          <ul className="bg-surface divide-border divide-y overflow-hidden rounded-3xl">
+            {entries.map((e) => (
+              <li key={e.id}>
+                <SwipeToDelete onDelete={() => onDelete(e)} label={`Delete ${e.name}`}>
+                  <button onClick={() => onEntry(e)} className="active:bg-surface-2 flex w-full items-center gap-3 px-4 py-3 text-left">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px]">{e.name}</div>
+                      <MacroLine n={e.nutrients} unit={unit} />
+                    </div>
+                    <span className="tabular text-muted shrink-0 text-sm">{e.grams ? `${Math.round(e.grams)} g` : "quick"}</span>
+                  </button>
+                </SwipeToDelete>
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted px-1 text-xs">Tap a food to change it · swipe left to delete</p>
+        </>
+      ) : (
+        <p className="text-muted py-6 text-center text-sm">Nothing logged for {SLOT_LABELS[slot].toLowerCase()} yet.</p>
+      )}
+    </>
   );
 }

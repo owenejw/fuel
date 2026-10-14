@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { db } from "../db";
+import { db, json } from "../db";
 import { getProfile } from "../repo";
 import { currentProfileId, forgetProfile, isUuid, rememberProfile, requireProfileId } from "../session";
 import type { Profile, ProfileSettings } from "@/lib/types";
@@ -82,5 +82,29 @@ export async function saveProfile(input: ProfileSettings): Promise<Profile> {
       p.remind_workouts,
     ],
   );
+  return (await getProfile(pid))!;
+}
+
+const Bottles = z.array(z.object({ name: z.string().trim().min(1).max(30), ml: z.number().int().min(50).max(5000) })).max(8);
+
+/** Saved water bottles for quick "I finished this bottle" logging. */
+export async function saveWaterBottles(bottles: { name: string; ml: number }[]): Promise<Profile> {
+  const pid = await requireProfileId();
+  await (await db()).query(`update profiles set water_bottles = $2::jsonb where id = $1`, [pid, json(Bottles.parse(bottles))]);
+  return (await getProfile(pid))!;
+}
+
+const Avatar = z.object({
+  emoji: z.string().trim().min(1).max(16).nullable(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable(),
+});
+
+export async function saveAvatar(input: { emoji: string | null; color: string | null }): Promise<Profile> {
+  const pid = await requireProfileId();
+  const a = Avatar.parse(input);
+  await (await db()).query(`update profiles set avatar_emoji = $2, avatar_color = $3 where id = $1`, [pid, a.emoji, a.color]);
   return (await getProfile(pid))!;
 }

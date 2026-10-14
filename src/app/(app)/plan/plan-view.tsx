@@ -90,7 +90,7 @@ export function PlanView() {
               {syncing ? "Syncing…" : "Sync calendar"}
             </button>
           ) : (
-            <Link href="/settings" className="text-accent text-sm">
+            <Link href="/settings/calendar" className="text-accent text-sm">
               Connect calendar
             </Link>
           )

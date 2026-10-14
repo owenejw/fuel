@@ -7,7 +7,9 @@ import { FoodSheet } from "@/components/food-sheet";
 import { IconDumbbell, IconIdea, IconPlus, IconRest, IconStreak, WORKOUT_ICONS } from "@/components/icons";
 import { METRIC } from "@/components/rings";
 import { SuggestionsCard } from "@/components/suggestions-card";
-import { AvatarLink, BigStat, EnergyCard, MiniBars, Tile } from "@/components/summary";
+import { WaterSheet } from "@/components/water-sheet";
+import { saveWaterBottles } from "@/server/actions/profile";
+import { AvatarLink, BigStat, ChevronBadge, EnergyCard, MiniBars, Tile } from "@/components/summary";
 import { useToast } from "@/components/toast";
 import { Spinner } from "@/components/ui";
 import { addWater } from "@/lib/data";
@@ -31,7 +33,7 @@ const kj = (n: number, unit: "kj" | "kcal") => Math.round(toUnit(n, unit)).toLoc
 /** Today: an at-a-glance summary. Every card opens a more detailed page. */
 export function TodayView() {
   const toast = useToast();
-  const { unit, profile, profileId } = useApp();
+  const { unit, profile, profileId, setProfile } = useApp();
   const date = today();
   const { day, entries, add, remove, setDay } = useDay(date);
   const [version, setVersion] = useState(0);
@@ -58,6 +60,18 @@ export function TodayView() {
 
   const t = useMemo(() => sumNutrients((entries ?? []).map((e) => e.nutrients)).totals, [entries]);
   const targets = day?.plan.targets;
+
+  const [waterOpen, setWaterOpen] = useState(false);
+  const addWaterMl = async (amount: number) => {
+    setDay((d) => ({ ...d, waterMl: Math.max(0, d.waterMl + amount) }));
+    try {
+      const ml = await addWater(date, amount);
+      setDay((d) => ({ ...d, waterMl: ml }));
+    } catch {
+      setDay((d) => ({ ...d, waterMl: Math.max(0, d.waterMl - amount) }));
+      toast("Could not save water");
+    }
+  };
 
   const undo = (saving: Promise<LogEntry[]>) => ({
     label: "Undo",
@@ -136,35 +150,36 @@ export function TodayView() {
             </Tile>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Diary */}
-              <Tile title="Diary" href="/diary">
-                <div className="text-[15px]">Today</div>
-                <BigStat value={String(entryCount)} unit={entryCount === 1 ? " food" : " foods"} color="var(--text)" />
-                <MiniBars
-                  height={44}
-                  color={METRIC.energy.color}
-                  values={(["breakfast", "lunch", "dinner", "snack"] as const).map(
-                    (s) => sumNutrients((entries ?? []).filter((e) => e.slot === s).map((e) => e.nutrients)).totals.energy_kj ?? 0,
-                  )}
-                  labels={["B", "L", "D", "S"]}
-                />
-              </Tile>
-
               {/* Water */}
               <WaterTile
                 ml={day.waterMl}
                 target={fluidTargetMl(profile.sex)}
-                onAdd={async (amount) => {
-                  setDay((d) => ({ ...d, waterMl: d.waterMl + amount }));
-                  try {
-                    const ml = await addWater(date, amount);
-                    setDay((d) => ({ ...d, waterMl: ml }));
-                  } catch {
-                    setDay((d) => ({ ...d, waterMl: Math.max(0, d.waterMl - amount) }));
-                    toast("Could not save water");
-                  }
-                }}
+                quick={profile.water_bottles?.[0] ?? { name: "Glass", ml: 250 }}
+                onOpen={() => setWaterOpen(true)}
+                onAdd={addWaterMl}
               />
+
+              {/* Vitamins & minerals */}
+              <Tile title="Vitamins" href="/micros">
+                <div className="text-[15px]">& minerals this week</div>
+                {summary?.micros ? (
+                  summary.micros.low + summary.micros.over > 0 ? (
+                    <>
+                      <BigStat value={String(summary.micros.low + summary.micros.over)} unit=" to watch" color="var(--warn)" />
+                      <div className="text-muted mt-1 text-xs">
+                        {summary.micros.low} low{summary.micros.over ? ` · ${summary.micros.over} over limit` : ""}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <BigStat value="All good" color={METRIC.protein.color} size="md" />
+                      <div className="text-muted mt-1 text-xs">{summary.micros.tracked} tracked</div>
+                    </>
+                  )
+                ) : (
+                  <Spinner className="text-muted mt-2" />
+                )}
+              </Tile>
 
               {/* Week average */}
               <Tile title="This week" href="/trends" className="col-span-2">
@@ -208,6 +223,28 @@ export function TodayView() {
         )}
       </div>
 
+      {day && (
+        <WaterSheet
+          open={waterOpen}
+          onClose={() => setWaterOpen(false)}
+          ml={day.waterMl}
+          target={fluidTargetMl(profile.sex)}
+          bottles={profile.water_bottles ?? []}
+          onAdd={(amount) => {
+            void addWaterMl(amount);
+            toast(amount > 0 ? `Added ${amount} mL water` : `Removed ${-amount} mL water`);
+          }}
+          onSaveBottles={(b) => {
+            const before = profile;
+            setProfile({ ...profile, water_bottles: b });
+            saveWaterBottles(b).then(setProfile, () => {
+              setProfile(before);
+              toast("Couldn't save bottles — try again");
+            });
+          }}
+        />
+      )}
+
       <FoodSheet
         food={openFood}
         onClose={() => setOpenFood(null)}
@@ -228,32 +265,49 @@ export function TodayView() {
   );
 }
 
-function WaterTile({ ml, target, onAdd }: { ml: number; target: number; onAdd: (ml: number) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
+function WaterTile({
+  ml,
+  target,
+  quick,
+  onOpen,
+  onAdd,
+}: {
+  ml: number;
+  target: number;
+  quick: { name: string; ml: number };
+  onOpen: () => void;
+  onAdd: (ml: number) => void;
+}) {
   const glasses = Math.round(target / 250);
   const filled = Math.floor(ml / 250);
   return (
-    <Tile title="Water">
-      <div className="text-[15px]">Today</div>
-      <BigStat value={String(Math.round(ml / 10) / 100)} target={(target / 1000).toFixed(1)} unit="L" color={METRIC.water.color} />
-      <div className="mt-2 flex flex-wrap gap-1">
-        {Array.from({ length: glasses }, (_, i) => (
-          <span key={i} className="h-2 w-2 rounded-full" style={{ background: i < filled ? METRIC.water.color : "var(--surface-2)" }} />
-        ))}
-      </div>
+    <section className="bg-surface flex flex-col rounded-3xl p-4">
+      <button onClick={onOpen} className="flex-1 text-left active:opacity-70" aria-label="Open water">
+        <div className="mb-2 flex items-center gap-2">
+          <h2 className="flex-1 text-[17px] font-semibold">Water</h2>
+          <ChevronBadge />
+        </div>
+        <div className="text-[15px]">Today</div>
+        <BigStat
+          value={String(Math.round(ml / 10) / 100)}
+          target={String(Math.round(target / 10) / 100)}
+          unit="L"
+          color={METRIC.water.color}
+        />
+        <div className="mt-2 flex flex-wrap gap-1">
+          {Array.from({ length: glasses }, (_, i) => (
+            <span key={i} className="h-2 w-2 rounded-full" style={{ background: i < filled ? METRIC.water.color : "var(--surface-2)" }} />
+          ))}
+        </div>
+      </button>
       <button
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          await onAdd(250);
-          setBusy(false);
-        }}
-        className="mt-3 flex h-9 w-full items-center justify-center gap-1 rounded-full text-sm font-semibold text-white active:scale-95 disabled:opacity-60"
+        onClick={() => onAdd(quick.ml)}
+        className="mt-3 flex h-9 w-full items-center justify-center gap-1 rounded-full text-sm font-semibold text-white active:scale-95"
         style={{ background: "linear-gradient(135deg, var(--water), var(--water-2))" }}
       >
-        <IconPlus width={16} height={16} strokeWidth={2.6} /> 250 ml
+        <IconPlus width={16} height={16} strokeWidth={2.6} /> {quick.ml} mL
       </button>
-    </Tile>
+    </section>
   );
 }
 

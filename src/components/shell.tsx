@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 // Tab roots: nothing to go back to, so no edge swipe there.
-const ROOTS = ["/", "/diary", "/trends", "/plan"];
+const ROOTS = ["/", "/meals", "/trends", "/plan"];
 
 /**
  * Wraps each page: a short fade-in on navigation, and (when installed to the Home Screen, where iOS

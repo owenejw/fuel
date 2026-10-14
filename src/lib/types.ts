@@ -35,7 +35,12 @@ export type Profile = {
   calendar_synced_at: string | null;
   remind_log_time: string | null;
   remind_workouts: boolean;
+  water_bottles: WaterBottle[];
+  avatar_emoji: string | null;
+  avatar_color: string | null;
 };
+
+export type WaterBottle = { name: string; ml: number };
 
 export type ProfileSettings = Omit<Profile, "id" | "calendar_synced_at">;
 

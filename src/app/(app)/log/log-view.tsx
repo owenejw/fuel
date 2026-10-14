@@ -16,6 +16,7 @@ import {
   IconChevronLeft,
   IconClock,
   IconEdit,
+  IconMic,
   IconMeal,
   IconPlus,
   IconSearch,
@@ -91,7 +92,7 @@ export function LogView() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
-  const { unit, profile } = useApp();
+  const { unit } = useApp();
 
   const date = isValidDate(params.get("date")) ? params.get("date")! : today();
   const slotParam = params.get("slot") as MealSlot | null;
@@ -244,7 +245,7 @@ export function LogView() {
           </span>
         </button>
 
-        <div className={cx("grid gap-2", profile.ai_enabled ? "grid-cols-4" : "grid-cols-3")}>
+        <div className="grid grid-cols-3 gap-2">
           <ActionTile
             icon={lookingUp ? undefined : IconBarcode}
             label={lookingUp ? "Looking up…" : "Scan"}
@@ -252,7 +253,8 @@ export function LogView() {
             disabled={lookingUp}
             primary
           />
-          {profile.ai_enabled && <ActionTile icon={IconCamera} label="Photo" href={`/log/photo?slot=${slot}&date=${date}`} />}
+          <ActionTile icon={IconMic} label="Describe" href={`/log/describe?slot=${slot}&date=${date}`} />
+          <ActionTile icon={IconCamera} label="Photo" href={`/log/photo?slot=${slot}&date=${date}`} />
           <ActionTile icon={IconBolt} label="Quick kJ" onClick={() => setQuickOpen(true)} />
           <ActionTile icon={IconEdit} label="New food" href={newFoodHref()} />
         </div>
