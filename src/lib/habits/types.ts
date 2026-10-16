@@ -1,5 +1,7 @@
 /** Habits section types. Nothing in the nutrition side imports these. */
 
+import type { PackedEntries } from "./pack";
+
 export const HABIT_TIMES = ["morning", "anytime", "evening"] as const;
 export type HabitTime = (typeof HABIT_TIMES)[number];
 export type HabitKind = "build" | "break";
@@ -46,6 +48,9 @@ export type HabitPrefs = { nudge_time: string | null; weekly_review: boolean };
 
 /** What the nutrition side says about a day, for habits that complete themselves. Read only. */
 export type AutoSignals = Partial<Record<AutoSource, boolean>>;
+
+/** HabitData as sent to the browser and kept offline: history packed (see pack.ts). */
+export type PackedHabitData = Omit<HabitData, "entries"> & { entries: PackedEntries };
 
 export type Milestone = { habit_id: string; days: number; reached_on: string };
 

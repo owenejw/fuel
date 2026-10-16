@@ -82,10 +82,9 @@ export function ManageView() {
               items={data.routines}
               getId={(r) => r.id}
               onReorder={(ids) =>
-                mutate(
-                  () => reorderRoutines(ids),
-                  (d) => ({ ...d, routines: ids.map((id, i) => ({ ...d.routines.find((r) => r.id === id)!, position: i })) }),
-                )
+                mutate(() => reorderRoutines(ids), {
+                  before: (d) => ({ ...d, routines: ids.map((id, i) => ({ ...d.routines.find((r) => r.id === id)!, position: i })) }),
+                })
               }
               render={(r, handle) => (
                 <div className="bg-surface flex items-center gap-3 px-3 py-2.5">
@@ -118,15 +117,14 @@ export function ManageView() {
               items={active}
               getId={(h) => h.id}
               onReorder={(ids) =>
-                mutate(
-                  () => reorderHabits(ids),
-                  (d) => ({
+                mutate(() => reorderHabits(ids), {
+                  before: (d) => ({
                     ...d,
                     habits: d.habits
                       .map((h) => (ids.includes(h.id) ? { ...h, position: ids.indexOf(h.id) } : h))
                       .sort((a, b) => a.position - b.position),
                   }),
-                )
+                })
               }
               render={(h, handle) => row(h, handle)}
             />
@@ -263,7 +261,22 @@ function RoutineEditor({
         onClick={async () => {
           setBusy(true);
           try {
-            await mutate(() => saveRoutine({ name, time_of_day: time, habitIds: ids }, routine?.id));
+            await mutate(() => saveRoutine({ name, time_of_day: time, habitIds: ids }, routine?.id), {
+              after: (d, rid) => ({
+                ...d,
+                routines: [
+                  ...d.routines.filter((r) => r.id !== rid),
+                  { id: rid, name: name.trim(), time_of_day: time, position: routine?.position ?? d.routines.length },
+                ].sort((a, b) => a.position - b.position),
+                habits: d.habits.map((h) =>
+                  ids.includes(h.id)
+                    ? { ...h, routine_id: rid, routine_position: ids.indexOf(h.id), time_of_day: time }
+                    : h.routine_id === rid
+                      ? { ...h, routine_id: null }
+                      : h,
+                ),
+              }),
+            });
             toast(routine ? "Routine saved" : "Routine added");
             onDone();
           } catch {
@@ -289,7 +302,13 @@ function RoutineEditor({
               }))
             )
               return;
-            await mutate(() => deleteRoutine(routine.id));
+            await mutate(() => deleteRoutine(routine.id), {
+              after: (d) => ({
+                ...d,
+                routines: d.routines.filter((r) => r.id !== routine.id),
+                habits: d.habits.map((h) => (h.routine_id === routine.id ? { ...h, routine_id: null } : h)),
+              }),
+            });
             onDone();
           }}
         >

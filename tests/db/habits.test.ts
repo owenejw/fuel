@@ -12,9 +12,14 @@ vi.mock("@/server/session", () => ({ requireProfileId: async () => current }));
 const actions = await import("@/server/habits/actions");
 const { openHabits } = await import("@/server/habits/reminders");
 const { blankHabit } = await import("@/lib/habits/meta");
+const { unpackEntries } = await import("@/lib/habits/pack");
 
 const today = "2026-10-12";
 const as = (pid: string) => (current = pid);
+const load = async () => {
+  const d = await actions.fetchHabitData(today);
+  return { ...d, entries: unpackEntries(d.entries) };
+};
 
 describe("habits data", () => {
   let owen: string;
@@ -35,41 +40,41 @@ describe("habits data", () => {
     expect(b.position).toBe(1);
     expect(a.reminder_time).toBe("07:30");
     as(jez);
-    expect((await actions.fetchHabitData(today)).habits).toHaveLength(0);
+    expect((await load()).habits).toHaveLength(0);
     as(owen);
-    expect((await actions.fetchHabitData(today)).habits.map((h) => h.name)).toEqual(["Stretch", "Water"]);
+    expect((await load()).habits.map((h) => h.name)).toEqual(["Stretch", "Water"]);
   });
 
   it("records, updates and clears a day's entry", async () => {
     as(owen);
-    const [stretch] = (await actions.fetchHabitData(today)).habits;
+    const [stretch] = (await load()).habits;
     await actions.setHabitEntry(stretch.id, today, { status: "done", count: 1 });
     await actions.setHabitEntry(stretch.id, today, { status: "skipped", count: 0 });
-    let data = await actions.fetchHabitData(today);
+    let data = await load();
     expect(data.entries).toEqual([{ habit_id: stretch.id, date: today, count: 0, status: "skipped" }]);
     await actions.setHabitEntry(stretch.id, today, null);
-    data = await actions.fetchHabitData(today);
+    data = await load();
     expect(data.entries).toHaveLength(0);
   });
 
   it("won't let one profile touch another's habits", async () => {
     as(owen);
-    const [stretch] = (await actions.fetchHabitData(today)).habits;
+    const [stretch] = (await load()).habits;
     as(jez);
     await actions.setHabitEntry(stretch.id, today, { status: "done", count: 1 });
     await actions.deleteHabit(stretch.id);
     await expect(actions.saveHabit(blankHabit(today, { name: "Hijack" }), stretch.id)).rejects.toThrow(/not found/);
     as(owen);
-    const data = await actions.fetchHabitData(today);
+    const data = await load();
     expect(data.habits.find((h) => h.id === stretch.id)?.name).toBe("Stretch");
     expect(data.entries).toHaveLength(0);
   });
 
   it("reorders habits", async () => {
     as(owen);
-    const ids = (await actions.fetchHabitData(today)).habits.map((h) => h.id);
+    const ids = (await load()).habits.map((h) => h.id);
     await actions.reorderHabits([...ids].reverse());
-    expect((await actions.fetchHabitData(today)).habits.map((h) => h.id)).toEqual([...ids].reverse());
+    expect((await load()).habits.map((h) => h.id)).toEqual([...ids].reverse());
   });
 
   it("chains habits into a routine in order", async () => {
@@ -77,53 +82,51 @@ describe("habits data", () => {
     const teeth = await actions.saveHabit(blankHabit(today, { name: "Brush teeth" }));
     const face = await actions.saveHabit(blankHabit(today, { name: "Wash face" }));
     const rid = await actions.saveRoutine({ name: "Wind down", time_of_day: "evening", habitIds: [teeth.id, face.id] });
-    let data = await actions.fetchHabitData(today);
+    let data = await load();
     const steps = data.habits.filter((h) => h.routine_id === rid).sort((a, b) => a.routine_position - b.routine_position);
     expect(steps.map((h) => h.name)).toEqual(["Brush teeth", "Wash face"]);
     expect(steps.every((h) => h.time_of_day === "evening")).toBe(true);
     // Reorder and drop a step.
     await actions.saveRoutine({ name: "Wind down", time_of_day: "evening", habitIds: [face.id] }, rid);
-    data = await actions.fetchHabitData(today);
+    data = await load();
     expect(data.habits.find((h) => h.id === teeth.id)?.routine_id).toBeNull();
     await actions.deleteRoutine(rid);
-    data = await actions.fetchHabitData(today);
+    data = await load();
     expect(data.habits.find((h) => h.id === face.id)?.routine_id).toBeNull();
   });
 
   it("turns vacation mode on and off", async () => {
     as(owen);
     await actions.setVacation(true, "2026-10-01");
-    expect((await actions.fetchHabitData(today)).pauses).toEqual([expect.objectContaining({ start_date: "2026-10-01", end_date: null })]);
+    expect((await load()).pauses).toEqual([expect.objectContaining({ start_date: "2026-10-01", end_date: null })]);
     await actions.setVacation(false, today);
-    expect((await actions.fetchHabitData(today)).pauses).toEqual([
-      expect.objectContaining({ start_date: "2026-10-01", end_date: "2026-10-11" }),
-    ]);
+    expect((await load()).pauses).toEqual([expect.objectContaining({ start_date: "2026-10-01", end_date: "2026-10-11" })]);
     // Started and ended the same day: no pause left behind.
     await actions.setVacation(true, today);
     await actions.setVacation(false, today);
-    expect((await actions.fetchHabitData(today)).pauses).toHaveLength(1);
+    expect((await load()).pauses).toHaveLength(1);
   });
 
   it("saves a note and mood, and clears them", async () => {
     as(owen);
     await actions.saveHabitDay(today, { note: "  Felt good  ", mood: 4 });
-    expect((await actions.fetchHabitData(today)).days).toEqual([{ date: today, note: "Felt good", mood: 4 }]);
+    expect((await load()).days).toEqual([{ date: today, note: "Felt good", mood: 4 }]);
     await actions.saveHabitDay(today, { note: null, mood: null });
-    expect((await actions.fetchHabitData(today)).days).toHaveLength(0);
+    expect((await load()).days).toHaveLength(0);
   });
 
   it("saves preferences", async () => {
     as(owen);
     await actions.saveHabitPrefs({ nudge_time: "20:30" });
     await actions.saveHabitPrefs({ weekly_review: false });
-    expect((await actions.fetchHabitData(today)).prefs).toEqual({ nudge_time: "20:30", weekly_review: false });
+    expect((await load()).prefs).toEqual({ nudge_time: "20:30", weekly_review: false });
     await actions.saveHabitPrefs({ nudge_time: null });
-    expect((await actions.fetchHabitData(today)).prefs.nudge_time).toBeNull();
+    expect((await load()).prefs.nudge_time).toBeNull();
   });
 
   it("records a milestone once per day", async () => {
     as(owen);
-    const [h] = (await actions.fetchHabitData(today)).habits;
+    const [h] = (await load()).habits;
     expect(await actions.recordMilestone(h.id, 7, today)).toBe(true);
     expect(await actions.recordMilestone(h.id, 7, today)).toBe(false);
     expect(await actions.recordMilestone(h.id, 7, "2026-11-01")).toBe(true);
@@ -139,7 +142,7 @@ describe("habits data", () => {
       [owen, today],
     );
     const before = (await test.query(`select count(*)::int as n from water_logs`)).rows;
-    const data = await actions.fetchHabitData(today);
+    const data = await load();
     expect(data.auto[today]?.water_goal).toBe(true);
     expect((await test.query(`select count(*)::int as n from water_logs`)).rows).toEqual(before);
     // And it isn't due any more, so no reminder.

@@ -45,7 +45,10 @@ export function CalendarView() {
     setDir(delta > 0 ? "left" : "right");
     setMonth(next);
   };
-  const habits = data.habits.filter((h) => !h.archived || data.entries.some((e) => e.habit_id === h.id && e.date.startsWith(month)));
+  const usedThisMonth = new Set<string>();
+  for (const e of data.entries) if (e.date.startsWith(month)) usedThisMonth.add(e.habit_id);
+  const habits = data.habits.filter((h) => !h.archived || usedThisMonth.has(h.id));
+  const moods = new Map(data.days.map((x) => [x.date, x.mood]));
   const shown = filter ? habits.filter((h) => h.id === filter) : habits;
   const doneOn = (d: string) => shown.filter((h) => h.kind === "build" && isDoneState(analyses.get(h.id)?.byDate.get(d)?.state));
   const selectedHabit = filter ? habits.find((h) => h.id === filter) : null;
@@ -127,7 +130,7 @@ export function CalendarView() {
             const future = d > today;
             const done = doneOn(d);
             const paused = isPaused(data.pauses, d);
-            const mood = data.days.find((x) => x.date === d)?.mood;
+            const mood = moods.get(d);
             const single = selectedHabit && done.length > 0;
             return (
               <button
