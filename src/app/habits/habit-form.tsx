@@ -50,9 +50,13 @@ function Form({ id, initial, today }: { id?: string; initial: (HabitInput & { ar
     if (h.schedule === "weekdays" && !h.weekdays) return toast("Pick at least one day");
     setBusy(true);
     try {
-      await mutate(() => saveHabit({ ...h, unit: h.unit?.trim() || null }, id));
+      const saved = await mutate(() => saveHabit({ ...h, unit: h.unit?.trim() || null }, id), {
+        // Show it on Today straight away; the background reload fills in the rest.
+        after: (d, saved) => ({ ...d, habits: id ? d.habits.map((x) => (x.id === id ? saved : x)) : [...d.habits, saved] }),
+      });
       toast(id ? "Saved" : `${h.name.trim()} added`);
-      router.push(id ? `/habits/${id}` : "/habits");
+      // A new habit opens Today with it highlighted (and its group opened).
+      router.push(id ? `/habits/${id}` : `/habits?h=${saved.id}`);
     } catch {
       toast("Couldn't save. Check the details and try again.");
     } finally {
@@ -280,7 +284,9 @@ function Form({ id, initial, today }: { id?: string; initial: (HabitInput & { ar
               type="button"
               className="text-accent flex w-full items-center px-4 py-3.5 text-left active:bg-white/5"
               onClick={async () => {
-                await mutate(() => setHabitArchived(id, !initial.archived));
+                await mutate(() => setHabitArchived(id, !initial.archived), {
+                  after: (d) => ({ ...d, habits: d.habits.map((x) => (x.id === id ? { ...x, archived: !initial.archived } : x)) }),
+                });
                 toast(initial.archived ? "Restored" : "Archived. Its history is kept");
                 router.push("/habits/manage");
               }}
@@ -301,7 +307,13 @@ function Form({ id, initial, today }: { id?: string; initial: (HabitInput & { ar
                   }))
                 )
                   return;
-                await mutate(() => deleteHabit(id));
+                await mutate(() => deleteHabit(id), {
+                  after: (d) => ({
+                    ...d,
+                    habits: d.habits.filter((x) => x.id !== id),
+                    entries: d.entries.filter((e) => e.habit_id !== id),
+                  }),
+                });
                 router.push("/habits/manage");
               }}
             >

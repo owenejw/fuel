@@ -33,6 +33,12 @@ export function InsightsView() {
     return out;
   }, [list, range, today]);
 
+  // Weekday rates and patterns walk 12 weeks per habit; work them out once per change, not on every render.
+  const breakdown = useMemo(
+    () => list.map((a) => ({ a, rates: weekdayRates(a, today).rates, patterns: findPatterns(a, today) })),
+    [list, today],
+  );
+
   if (!data)
     return (
       <div className="pt-safe px-4 pt-20">
@@ -54,7 +60,7 @@ export function InsightsView() {
   const thisWeek = weekRates.length ? weekRates.reduce((s, r) => s + r, 0) / weekRates.length : null;
   const picked = pick ? analyses.get(pick) : null;
   const series = picked ? picked.series.filter((p) => p.date > addDays(today, -Number(range))) : average;
-  const patterns = list.flatMap((a) => findPatterns(a, today));
+  const patterns = breakdown.flatMap((b) => b.patterns);
 
   return (
     <>
@@ -115,8 +121,7 @@ export function InsightsView() {
                 <span key={i}>{d}</span>
               ))}
             </div>
-            {list.map((a) => {
-              const { rates } = weekdayRates(a, today);
+            {breakdown.map(({ a, rates }) => {
               const c = habitColor(a.habit.color);
               return (
                 <Link

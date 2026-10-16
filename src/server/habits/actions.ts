@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { addDays, isValidDate } from "@/lib/dates";
-import { AUTO_SOURCES, HABIT_TIMES, type Habit, type HabitData, type HabitPrefs } from "@/lib/habits/types";
+import { packEntries } from "@/lib/habits/pack";
+import { AUTO_SOURCES, HABIT_TIMES, type Habit, type HabitPrefs, type PackedHabitData } from "@/lib/habits/types";
 import { db, json } from "../db";
 import { requireProfileId } from "../session";
 import { loadHabitData, toHabit } from "./store";
@@ -33,9 +34,12 @@ const HabitInput = z
   })
   .refine((h) => !h.end_date || h.end_date >= h.start_date, { message: "The end date is before the start date", path: ["end_date"] });
 
-export async function fetchHabitData(today: string): Promise<HabitData> {
+/** Everything the habits section shows, with history packed to keep the download small. */
+export async function fetchHabitData(today: string): Promise<PackedHabitData> {
   const pid = await requireProfileId();
-  return loadHabitData(pid, DateStr.parse(today));
+  const day = DateStr.parse(today);
+  const data = await loadHabitData(pid, day);
+  return { ...data, entries: packEntries(data.entries, data.entries[0]?.date ?? day) };
 }
 
 export async function saveHabit(input: z.input<typeof HabitInput>, id?: string): Promise<Habit> {

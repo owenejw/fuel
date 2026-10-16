@@ -239,18 +239,17 @@ dialog.sheet.closing::backdrop {
 ::view-transition-new(.section-in) {
   animation: section-in 0.38s cubic-bezier(0.2, 0.9, 0.25, 1) both;
 }
+/* Opacity and scale only: both run on the GPU compositor, so they stay smooth on iPhone. */
 @keyframes section-out {
   to {
     opacity: 0;
     transform: scale(0.96);
-    filter: blur(4px);
   }
 }
 @keyframes section-in {
   from {
     opacity: 0;
     transform: scale(1.04);
-    filter: blur(4px);
   }
 }
 

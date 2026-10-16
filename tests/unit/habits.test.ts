@@ -269,3 +269,20 @@ describe("insights", () => {
     expect(dayProgress([a1, a2, brk], MON)).toEqual({ done: 1, due: 2 });
   });
 });
+
+describe("packed history", () => {
+  it("round-trips entries and is much smaller", async () => {
+    const { packEntries, unpackEntries } = await import("@/lib/habits/pack");
+    const entries: HabitEntry[] = [
+      ...days("2025-10-16", 365).map((d) => done(d, 1, "a")),
+      ...days("2026-01-01", 40).map((d) => done(d, 7, "b")),
+      { habit_id: "c", date: "2026-10-01", count: 0, status: "slip" as const },
+      { habit_id: "a", date: "2026-10-16", count: 0, status: "skipped" as const },
+    ].sort((x, y) => x.date.localeCompare(y.date));
+    const packed = packEntries(entries, entries[0].date);
+    const back = unpackEntries(packed);
+    const key = (e: HabitEntry) => `${e.habit_id}${e.date}${e.count}${e.status}`;
+    expect(back.map(key).sort()).toEqual(entries.map(key).sort());
+    expect(JSON.stringify(packed).length).toBeLessThan(JSON.stringify(entries).length / 4);
+  });
+});

@@ -30,7 +30,10 @@ export function HabitsTodayView() {
   const [selected, setSelected] = useState<string | null>(null);
   const date = selected && selected <= today ? selected : today;
   const [openId, setOpenId] = useState<string | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(() => params.get("h"));
+  // The habit to highlight: the next step after a tick, or ?h= from a reminder or a newly added habit. Read from the
+  // URL each time, because this page is kept alive between visits.
+  const [focusLocal, setFocusId] = useState<string | null>(null);
+  const focusId = focusLocal ?? params.get("h");
   const [expanded, setExpanded] = useState<Partial<Record<HabitTime | "break", boolean>>>({});
   const [now] = useState(() => new Date());
 
@@ -68,6 +71,14 @@ export function HabitsTodayView() {
       };
     });
   }, [data, date, today, now, analyses]);
+
+  const review = useMemo(
+    () =>
+      data && data.prefs.weekly_review && showReviewCard(today) && data.habits.some((h) => !h.archived)
+        ? weeklyReview([...analyses.values()], data.days, data.pauses, reviewWeekStart(today), today)
+        : null,
+    [data, analyses, today],
+  );
 
   if (!data)
     return (
@@ -109,10 +120,6 @@ export function HabitsTodayView() {
       stateOf(h) === "skipped" ? undefined : { toast: `${h.name} skipped` },
     );
 
-  const review =
-    data.prefs.weekly_review && showReviewCard(today) && hasAny
-      ? weeklyReview([...analyses.values()], data.days, data.pauses, reviewWeekStart(today), today)
-      : null;
   const name = (id: string | undefined) => data.habits.find((h) => h.id === id)?.name;
 
   return (
@@ -166,7 +173,7 @@ export function HabitsTodayView() {
         {groups
           .filter((g) => g.items.length)
           .map((g) => {
-            const isOpen = expanded[g.time] ?? g.time === firstOpen;
+            const isOpen = expanded[g.time] ?? (g.time === firstOpen || (!!focusId && g.habits.some((h) => h.id === focusId)));
             const complete = g.done === g.habits.length;
             return (
               <section key={g.time} aria-label={TIME_LABELS[g.time]}>
@@ -314,7 +321,7 @@ function WeekRings({ date, today, onSelect }: { date: string; today: string; onS
 
 /** No habits yet: one-tap starters, or make your own. */
 function EmptyState() {
-  const { today, refresh } = useHabits();
+  const { today, mutate } = useHabits();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   return (
@@ -339,8 +346,7 @@ function EmptyState() {
             onClick={async () => {
               setBusy(t.name);
               try {
-                await saveHabit(blankHabit(today, t));
-                await refresh();
+                await mutate(() => saveHabit(blankHabit(today, t)), { after: (d, saved) => ({ ...d, habits: [...d.habits, saved] }) });
               } catch {
                 toast("Couldn't add that habit");
               } finally {
