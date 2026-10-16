@@ -17,6 +17,7 @@ There is **no sign-in**. Each device picks a profile once ("Who's this?"), and a
 | **Suggestions** | A rule-based engine over your own last 60 days of foods and saved meals (see below). It also suggests 1–2 never-logged AFCD foods that close a flagged micronutrient gap. |
 | **AI (optional, per profile)** | AI suggestions, photo-of-plate logging (itemised estimate you edit before saving) and nutrition-panel reading for custom foods. Runs only on the server, and only when the profile turns it on. |
 | **Today** | Greeting, streak and week dots, one kJ ring with colour-coded macro bars (tap for the **Nutrition** page: each nutrient by meal, top foods, and a week picker where upcoming days can be set as training or rest), and tiles for water (saved bottles, add/remove), vitamins & minerals, this week, training and weight. Food lives in **Meals**: an overview plus a tab per meal. Settings is the **Account** page behind the avatar (emoji avatars). |
+| **Habits** | A separate section with its own pages and tab bar, reached from the round glass button beside the tab bar (see below). |
 | **Other** | PWA: installable, offline copy of recent days and frequent foods. Web-push reminders for logging and pre-workout fuelling. CSV export of logs, weights and workouts. Dark mode. |
 
 Unknown nutrients are stored as absent, shown as **"no data"**, and never counted as zero. Totals that include foods missing a value show `*` and a note.
@@ -100,9 +101,27 @@ There's no web API for Apple Health, so a free iPhone Shortcut called **kilo JOL
 
 Shortcuts can't edit or delete Health samples, so a food edited after it was synced keeps its old values in Health. These two endpoints skip the household passcode and authenticate with the sync key instead.
 
+## Habits
+
+A habit tracker that lives in the same app but is its own section: `/habits` has its own layout, pages and tab bar (**Today · Calendar · + · Insights · Habits**) and an indigo accent instead of teal. The round glass button beside either tab bar switches section, with the bar morphing between the two (React `<ViewTransition>`). Opening the app returns to the section used last (turn this off in Habit settings).
+
+| Area | What's there |
+| --- | --- |
+| **Habits** | Name, icon, colour, time of day (Morning / Anytime / Evening). Yes/no or count (e.g. 8 glasses). Every day, chosen weekdays, or N times a week. Habits to break, shown as days since the last slip. Optional start and end dates for challenges. Reminder time per habit. |
+| **Today** | Checklist grouped by time of day, with the part of the day you're in first. Tap the ring to tick (Undo in the toast); swipe left to skip (skips never count as misses). Tap a past day in the week rings to fill it in. A mood and one-line note per day. |
+| **Routines** | Chain habits (brush teeth → wash face → skincare). Shown as a linked chain; ticking a step highlights the next and says what it is. |
+| **Progress** | Strength score (the main number): an exponential moving average of completions (α = 0.035 per day, scaled for less frequent schedules), so a miss takes off a little and it never resets to zero. Streaks are shown smaller. Milestone celebrations at 7, 14, 21, 30, 50, 100 and 365. |
+| **Views** | Month calendar with a dot per habit done; year grid, strength trend and weekday bars per habit; Insights with overall strength, trend, a weekday heatmap and patterns ("You usually miss Skincare on Fridays"); the Sunday weekly review (best habit, most missed, patterns, mood). |
+| **Vacation mode** | Pauses everything: those days are left out of strength, streaks and reminders. |
+| **Nutrition links** | Optional habits that complete themselves: water goal, protein target, logged all meals (breakfast, lunch, dinner), trained today (a ticked-off or Apple Health workout). |
+
+**One-way data.** Habits read nutrition data only through `src/server/habits/nutrition-signals.ts` (read only). Nothing in the nutrition side imports habits code or touches `habit_*` tables, and habits code never writes nutrition tables. ESLint (`no-restricted-imports` in `eslint.config.mjs`) and `tests/unit/habits-boundary.test.ts` enforce it. Habit data belongs to one profile, like logs.
+
+Habit reminders go out on the same cron run as the nutrition ones, so they arrive within about 15 minutes of the time set (later if GitHub's schedule is delayed). Each habit can have a reminder, sent only if it's still due; the optional evening nudge lists what's left. iPhone web apps can't schedule notifications on the device or add buttons to them, so tapping one opens Habits with that habit highlighted.
+
 ## Reminders (web push)
 
-On iPhone, add kilo JOL to the Home Screen first (iOS 16.4+), then turn reminders on in Settings. A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so `.github/workflows/reminders.yml` does it from GitHub Actions instead: add the same `CRON_SECRET` as a repository secret (and optionally an `APP_URL` repository variable).
+On iPhone, add kilo JOL to the Home Screen first (iOS 16.4+), then turn reminders on in Settings (or Habit settings; both use the same subscription, and turning reminders off in Settings stops habit reminders on that device too). A scheduler must call `GET /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET` about every 15 minutes. Vercel Hobby crons run only once a day, so `.github/workflows/reminders.yml` does it from GitHub Actions instead: add the same `CRON_SECRET` as a repository secret (and optionally an `APP_URL` repository variable).
 
 ## Tests
 
@@ -112,6 +131,8 @@ npm run test:db   # schema + access tests on an in-process Postgres
 ```
 
 * `tests/db` applies the real migrations to PGlite with Supabase's `anon` and `authenticated` roles. It checks that those roles can't read or delete anything in any table, that RLS is on everywhere, that profile data is scoped and cascades on delete while shared foods survive, and that migrations re-run cleanly.
+* `tests/db/habits.test.ts` runs the habits server actions against PGlite: per-profile scoping, routines, vacation, notes, nutrition auto-completion (read only) and cleanup on profile delete.
+* `tests/unit/habits*.test.ts` covers schedules, strength, streaks, skips, vacation, N-per-week quotas, milestones, patterns, the weekly review, and the one-way boundary.
 * `tests/unit` covers TDEE, macro targets, carb loading, the EWMA weight trend, adaptive TDEE, recommendation scoring, the fuelling timeline, calendar event classification, NRVs and micronutrient flags, the OFF, USDA and AFCD parsers, and nutrient arithmetic.
 
 ## Layout
@@ -119,15 +140,18 @@ npm run test:db   # schema + access tests on an in-process Postgres
 ```
 src/
   app/
-    (app)/            Today, Log (+ new-food, recipe, photo), Trends, Plan, Settings
+    (app)/            nutrition: Today, Log (+ new-food, recipe, photo), Trends, Plan, Settings
+    habits/           habits section: Today, calendar, insights, review, manage, [id], new, settings
     profiles/         "Who's this?" picker
     onboarding/       profile details
     unlock/           optional passcode
     api/              foods/search, foods/barcode/[code], export, cron/reminders
   components/         UI, sheets, scanner, charts, cards
+  lib/habits/         habit logic: schedules, strength, streaks, insights
   lib/                pure logic: nutrients, tdee, weight, nrv, recommend, fuelling, calendar, parsers
   server/             db (Postgres/PGlite), session cookie, repo, suggestions, calendar sync, reminders
     actions/          server actions called from the UI
+    habits/           habits actions, store, reminders, nutrition-signals (read-only bridge)
   proxy.ts            passcode gate + profile redirect
 supabase/migrations/  schema
 scripts/              db:migrate, seed:afcd, icons

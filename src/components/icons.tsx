@@ -14,6 +14,7 @@ import {
   ChartColumn,
   Check,
   ChefHat,
+  CircleCheckBig,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -164,6 +165,10 @@ export const IconDumbbell: Icon = Dumbbell;
 export const IconRest: Icon = Armchair;
 export const IconHeart: Icon = HeartPulse;
 export const IconGrid: Icon = LayoutGrid;
+
+// Sections
+export const IconHabits: Icon = CircleCheckBig;
+export const IconNutrition: Icon = Apple;
 export const IconMic: Icon = Mic;
 export const IconStar: Icon = Star;
 export const IconTrending: Icon = TrendingUp;

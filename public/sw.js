@@ -4,10 +4,10 @@
  * - API and Supabase requests are never cached here; the app keeps its own
  *   per-user offline copy of today's log and recent foods in localStorage.
  */
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL = `shell-${VERSION}`;
 const STATIC = `static-${VERSION}`;
-const PRECACHE = ["/", "/meals", "/log", "/offline", "/manifest.webmanifest", "/icons/icon-192.png"];
+const PRECACHE = ["/", "/meals", "/log", "/habits", "/offline", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -1,18 +1,12 @@
-import { AppProvider } from "@/components/app-provider";
-import { ConfirmProvider } from "@/components/confirm";
+import { AppFrame } from "@/components/app-frame";
 import { Shell } from "@/components/shell";
 import { TabBar } from "@/components/tab-bar";
-import { ToastProvider } from "@/components/toast";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ToastProvider>
-      <AppProvider>
-        <ConfirmProvider>
-          <Shell>{children}</Shell>
-          <TabBar />
-        </ConfirmProvider>
-      </AppProvider>
-    </ToastProvider>
+    <AppFrame>
+      <Shell section="nutrition">{children}</Shell>
+      <TabBar />
+    </AppFrame>
   );
 }
