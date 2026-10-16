@@ -1,20 +1,33 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, ViewTransition, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { handleRequestFailure } from "@/lib/offline";
+import { SECTIONS, rememberSection, sectionOnLaunch, type Section } from "./sections";
 
-// Tab roots: nothing to go back to, so no edge swipe there.
-const ROOTS = ["/", "/meals", "/trends", "/plan"];
+// The launch redirect happens once per page load. Pages are kept alive in the background, so this can't live in state.
+let launchRedirected = false;
 
 /**
  * Wraps each page: a short fade-in on navigation, and (when installed to the Home Screen, where iOS
  * has no back gesture of its own) swipe in from the left edge to go back.
  */
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, section }: { children: ReactNode; section: Section }) {
   const pathname = usePathname();
   const router = useRouter();
   const page = useRef<HTMLDivElement>(null);
+  // Tab roots: nothing to go back to, so no edge swipe there.
+  const roots = SECTIONS[section].roots;
+
+  // Opening the app goes back to the section used last.
+  const [launchTo] = useState(() => (launchRedirected ? null : sectionOnLaunch(section, pathname)));
+  const redirecting = !!launchTo && !launchRedirected;
+  useEffect(() => {
+    if (redirecting) {
+      launchRedirected = true;
+      router.replace(SECTIONS[launchTo].root);
+    } else rememberSection(section);
+  }, [redirecting, launchTo, router, section, pathname]);
 
   // Pull down from the top to refresh (installed app only; Safari already does this in the browser).
   const pull = useRef<HTMLDivElement>(null);
@@ -79,7 +92,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const el = page.current;
-    if (!el || ROOTS.includes(pathname)) return;
+    if (!el || roots.includes(pathname)) return;
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     if (!standalone) return;
@@ -128,7 +141,7 @@ export function Shell({ children }: { children: ReactNode }) {
       el.style.transition = "transform 0.22s cubic-bezier(0.2, 0.9, 0.25, 1)";
       if (dx > window.innerWidth * 0.35 || velocity > 0.5) {
         el.style.transform = "translateX(100%)";
-        setTimeout(() => (window.history.length > 1 ? router.back() : router.push("/")), 180);
+        setTimeout(() => (window.history.length > 1 ? router.back() : router.push(SECTIONS[section].root)), 180);
       } else {
         el.style.transform = "";
         setTimeout(() => (el.style.boxShadow = ""), 220);
@@ -144,7 +157,9 @@ export function Shell({ children }: { children: ReactNode }) {
       document.removeEventListener("touchend", onEnd);
       document.removeEventListener("touchcancel", onEnd);
     };
-  }, [pathname, router]);
+  }, [pathname, router, roots, section]);
+
+  if (redirecting) return null;
 
   return (
     <>
@@ -153,9 +168,12 @@ export function Shell({ children }: { children: ReactNode }) {
         aria-hidden
         className="border-accent pointer-events-none fixed top-[calc(env(safe-area-inset-top)-28px)] left-1/2 z-40 -ml-3.5 h-7 w-7 rounded-full border-[3px] border-t-transparent opacity-0"
       />
-      <div ref={page} key={pathname} className="page-in bg-bg mx-auto min-h-dvh max-w-lg pb-32">
-        {children}
-      </div>
+      {/* Switching section: the old one recedes and the new one comes forward. Other navigations use page-in. */}
+      <ViewTransition enter={{ section: "section-in", default: "none" }} exit={{ section: "section-out", default: "none" }} default="none">
+        <div ref={page} key={pathname} className="page-in bg-bg mx-auto min-h-dvh max-w-lg pb-32">
+          {children}
+        </div>
+      </ViewTransition>
     </>
   );
 }

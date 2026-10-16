@@ -13,6 +13,10 @@
   --accent: #30d5c8;
   --accent-soft: #0f3a37;
   --accent-text: #00201d;
+  --accent-hi: #8ff5ea;
+  --accent-lo: #1fa89d;
+  --accent-glow: rgba(48, 213, 200, 0.45);
+  --accent-shade: rgba(0, 60, 55, 0.35);
   --danger: #ff453a;
   --warn: #ffd60a;
   --energy: #ff2d55;
@@ -29,6 +33,17 @@
   --water-2: #64b5ff;
   --sheet: linear-gradient(180deg, #1d2b4f 0%, #121a33 45%, #0d1226 100%);
   --sheet-border: rgba(120, 160, 255, 0.28);
+}
+
+/* The habits section keeps the same design system with its own accent (indigo), so you can tell where you are. */
+.section-habits {
+  --accent: #7d7aff;
+  --accent-soft: #26254f;
+  --accent-text: #0c0b2e;
+  --accent-hi: #c9c8ff;
+  --accent-lo: #5856d6;
+  --accent-glow: rgba(125, 122, 255, 0.45);
+  --accent-shade: rgba(20, 18, 90, 0.35);
 }
 
 @theme inline {
@@ -201,14 +216,154 @@ dialog.sheet.closing::backdrop {
     0 2px 10px rgba(0, 0, 0, 0.25);
 }
 .glass-accent {
-  background: radial-gradient(120% 120% at 30% 15%, #8ff5ea, var(--accent) 55%, #1fa89d);
+  background: radial-gradient(120% 120% at 30% 15%, var(--accent-hi), var(--accent) 55%, var(--accent-lo));
   box-shadow:
     inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
-    inset 0 -3px 6px rgba(0, 60, 55, 0.35),
-    0 6px 18px rgba(48, 213, 200, 0.45);
+    inset 0 -3px 6px var(--accent-shade),
+    0 6px 18px var(--accent-glow);
 }
 @media (prefers-reduced-motion: reduce) {
   .glass-lens {
     transition: none;
+  }
+}
+
+/* Switching section (Nutrition ⇄ Habits): the tab bar morphs, the old section recedes, the new one comes forward. */
+::view-transition-group(.tab-bar-morph) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.3, 1.25, 0.5, 1);
+}
+::view-transition-old(.section-out) {
+  animation: section-out 0.24s cubic-bezier(0.4, 0, 1, 1) both;
+}
+::view-transition-new(.section-in) {
+  animation: section-in 0.38s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes section-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(4px);
+  }
+}
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+    filter: blur(4px);
+  }
+}
+
+/* Habits: the tick draws itself and the ring gives a little pop. */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 24px;
+  }
+  to {
+    stroke-dashoffset: 0px;
+  }
+}
+.check-draw {
+  stroke-dasharray: 24;
+  animation: check-draw 0.32s 0.08s cubic-bezier(0.3, 0.9, 0.3, 1) both;
+}
+@keyframes habit-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.86);
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.habit-pop {
+  animation: habit-pop 0.42s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+/* "Up next" in a routine: a soft glow that breathes twice. */
+@keyframes next-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--glow, rgba(125, 122, 255, 0.35));
+  }
+}
+.next-glow {
+  animation: next-glow 1.4s ease-in-out 2;
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: rise-in 0.34s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+/* Calendar months slide in from the side you swiped towards. */
+@keyframes month-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes month-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+/* Milestone celebration. */
+@keyframes burst {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.burst {
+  animation: burst 0.6s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+@keyframes ring-fill {
+  from {
+    stroke-dashoffset: calc(var(--circ) * 1px);
+  }
+  to {
+    stroke-dashoffset: 0px;
+  }
+}
+.ring-fill {
+  animation: ring-fill 1s 0.2s cubic-bezier(0.3, 0.9, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .check-draw,
+  .habit-pop,
+  .next-glow,
+  .rise-in,
+  .burst,
+  .ring-fill {
+    animation-duration: 0.01s;
+    animation-delay: 0s;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01s !important;
   }
 }

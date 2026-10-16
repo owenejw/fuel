@@ -2,32 +2,65 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, ViewTransition } from "react";
 import { IconCalendar, IconChart, IconMeal, IconPlus, IconToday, type Icon } from "./icons";
+import { SectionSwitch } from "./section-switch";
+import { otherSection, type Section } from "./sections";
 import { cx } from "./ui";
 
-type Tab = { href: string; label: string; Icon: Icon; match?: string[] };
+export type Tab = { href: string; label: string; Icon: Icon; match?: string[]; exact?: boolean };
+export type CenterAction = { href: string; label: string; Icon: Icon };
 
-const LEFT: Tab[] = [
-  { href: "/", label: "Today", Icon: IconToday, match: ["/nutrition", "/micros", "/settings"] },
+const NUTRITION_LEFT: Tab[] = [
+  { href: "/", label: "Today", Icon: IconToday, match: ["/nutrition", "/micros", "/settings"], exact: true },
   { href: "/meals", label: "Meals", Icon: IconMeal },
 ];
-const RIGHT: Tab[] = [
+const NUTRITION_RIGHT: Tab[] = [
   { href: "/trends", label: "Trends", Icon: IconChart },
   { href: "/plan", label: "Plan", Icon: IconCalendar },
 ];
-const TABS = [...LEFT, ...RIGHT];
 
-/** Floating "liquid glass" capsule. A glass highlight slides to the active tab. */
+/** The nutrition section's tab bar. */
 export function TabBar() {
+  return (
+    <GlassTabBar
+      left={NUTRITION_LEFT}
+      right={NUTRITION_RIGHT}
+      center={{ href: "/log", label: "Log food", Icon: IconPlus }}
+      section="nutrition"
+    />
+  );
+}
+
+/**
+ * Floating "liquid glass" capsule with a round action in the middle and, beside it, the button that switches
+ * section. A glass highlight slides to the active tab; switching section morphs one bar into the other.
+ */
+export function GlassTabBar({
+  left,
+  right,
+  center,
+  section,
+  isActiveTab,
+}: {
+  left: Tab[];
+  right: Tab[];
+  center: CenterAction;
+  /** The section this bar belongs to; the round button goes to the other one. */
+  section: Section;
+  /** Overrides the default "path starts with href" matching. */
+  isActiveTab?: (t: Tab, pathname: string) => boolean;
+}) {
+  const TABS = [...left, ...right];
   const realPath = usePathname();
   // Highlight the tapped tab immediately, before the page has loaded.
   const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
   const pathname = pending && pending.from === realPath ? pending.to : realPath;
   const isActive = (t: Tab) =>
-    (t.href === "/" ? pathname === "/" : pathname.startsWith(t.href)) || !!t.match?.some((m) => pathname.startsWith(m));
-  const logActive = pathname.startsWith("/log");
-  const activeIndex = logActive ? -1 : TABS.findIndex(isActive);
+    isActiveTab?.(t, pathname) ??
+    ((t.exact ? pathname === t.href : pathname.startsWith(t.href)) || !!t.match?.some((m) => pathname.startsWith(m)));
+  const centerActive = pathname === center.href || pathname.startsWith(`${center.href}/`);
+  const activeIndex = centerActive ? -1 : TABS.findIndex(isActive);
 
   const bar = useRef<HTMLUListElement>(null);
   const items = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -76,32 +109,37 @@ export function TabBar() {
   };
 
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),12px)]">
-      <ul ref={bar} className="glass pointer-events-auto relative mx-auto flex max-w-lg items-center gap-1 rounded-full p-1.5">
-        {lens && (
-          <span
-            aria-hidden
-            className="glass-lens absolute top-1.5 bottom-1.5 left-0 rounded-full transition-[transform,width] duration-[420ms] ease-[cubic-bezier(0.3,1.4,0.5,1)]"
-            style={{ width: lens.w, transform: `translateX(${lens.x}px)` }}
-          />
-        )}
-        {LEFT.map((t, i) => tab(t, i))}
-        <li className="relative z-10 flex shrink-0 justify-center px-1">
-          <Link
-            href="/log"
-            aria-label="Log food"
-            aria-current={logActive ? "page" : undefined}
-            onClick={() => setPending({ from: realPath, to: "/log" })}
-            className={cx(
-              "glass-accent text-accent-text flex h-14 w-14 items-center justify-center rounded-full transition active:scale-90",
-              logActive && "ring-2 ring-white/70",
+    <ViewTransition name="tab-bar" share={{ section: "tab-bar-morph", default: "none" }} update="none">
+      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),12px)]">
+        <div className="mx-auto flex max-w-lg items-center gap-2">
+          <ul ref={bar} className="glass pointer-events-auto relative flex min-w-0 flex-1 items-center gap-1 rounded-full p-1.5">
+            {lens && (
+              <span
+                aria-hidden
+                className="glass-lens absolute top-1.5 bottom-1.5 left-0 rounded-full transition-[transform,width] duration-[420ms] ease-[cubic-bezier(0.3,1.4,0.5,1)]"
+                style={{ width: lens.w, transform: `translateX(${lens.x}px)` }}
+              />
             )}
-          >
-            <IconPlus width={28} height={28} strokeWidth={2.8} />
-          </Link>
-        </li>
-        {RIGHT.map((t, i) => tab(t, i + LEFT.length))}
-      </ul>
-    </nav>
+            {left.map((t, i) => tab(t, i))}
+            <li className="relative z-10 flex shrink-0 justify-center px-1">
+              <Link
+                href={center.href}
+                aria-label={center.label}
+                aria-current={centerActive ? "page" : undefined}
+                onClick={() => setPending({ from: realPath, to: center.href })}
+                className={cx(
+                  "glass-accent text-accent-text flex h-14 w-14 items-center justify-center rounded-full transition active:scale-90",
+                  centerActive && "ring-2 ring-white/70",
+                )}
+              >
+                <center.Icon width={28} height={28} strokeWidth={2.8} />
+              </Link>
+            </li>
+            {right.map((t, i) => tab(t, i + left.length))}
+          </ul>
+          <SectionSwitch to={otherSection(section)} />
+        </div>
+      </nav>
+    </ViewTransition>
   );
 }

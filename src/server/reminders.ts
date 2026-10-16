@@ -9,13 +9,17 @@ const TZ = process.env.APP_TIMEZONE || "Australia/Sydney";
 
 type Sub = { endpoint: string; profile_id: string; keys: { p256dh: string; auth: string } };
 
+/** A notification to send to every device of one profile, at most once per key. */
+export type DueReminder = { pid: string; key: string; title: string; body: string; url: string };
+
 /**
  * Called by a scheduler every ~15 minutes. Sends:
  * - a logging nudge at the profile's reminder time if little is logged today
  * - a fuelling nudge ~2.5 h before a planned workout
+ * plus any `extra` reminders worked out elsewhere (the cron route adds the habits section's).
  * Each reminder is sent at most once (reminders_sent).
  */
-export async function sendDueReminders(now = new Date()) {
+export async function sendDueReminders(now = new Date(), extra: DueReminder[] = []) {
   const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
   if (!pub || !priv) return { sent: 0, skipped: "VAPID keys not configured" };
@@ -29,7 +33,7 @@ export async function sendDueReminders(now = new Date()) {
     `select id, remind_log_time, remind_workouts from profiles where id in (select profile_id from push_subscriptions)`,
   );
 
-  const due: { pid: string; key: string; title: string; body: string; url: string }[] = [];
+  const due: DueReminder[] = [...extra];
   for (const p of profiles) {
     if (p.remind_log_time) {
       const at = timeToMinutes(String(p.remind_log_time).slice(0, 5));
